@@ -81,6 +81,12 @@ class TodoViewProvider implements vscode.WebviewViewProvider {
 				case 'clearAll':
 					this.clearAll();
 					break;
+				case 'changeCategory':
+					this.changeCategory(data.id, data.category);
+					break;
+				case 'updateTitle':
+					this.updateTitle(data.id, data.title);
+					break;
 			}
 		});
 	}
@@ -93,18 +99,18 @@ class TodoViewProvider implements vscode.WebviewViewProvider {
 		});
 	}
 
-	public clearCompleted() {
+	public async clearCompleted() {
 		let tasks = this._state.get<any[]>('tasks', []);
 		tasks = tasks.filter(t => !t.completed);
-		this._state.update('tasks', tasks);
-		this._updateWebview();
+		await this._state.update('tasks', tasks);
+		this._updateWebview(tasks);
 	}
 
-	public clearActive() {
+	public async clearActive() {
 		let tasks = this._state.get<any[]>('tasks', []);
 		tasks = tasks.filter(t => t.completed);
-		this._state.update('tasks', tasks);
-		this._updateWebview();
+		await this._state.update('tasks', tasks);
+		this._updateWebview(tasks);
 	}
 
 	public async clearAll() {
@@ -115,58 +121,140 @@ class TodoViewProvider implements vscode.WebviewViewProvider {
 		);
 
 		if (result === 'Delete All') {
-			this._state.update('tasks', []);
-			this._updateWebview();
+			await this._state.update('tasks', []);
+			this._updateWebview([]);
 		}
 	}
 
-	public checkAll() {
+	public async checkAll() {
 		let tasks = this._state.get<any[]>('tasks', []);
 		tasks.forEach(t => t.completed = true);
-		this._state.update('tasks', tasks);
-		this._updateWebview();
+		await this._state.update('tasks', tasks);
+		this._updateWebview(tasks);
 	}
 
-	public uncheckAll() {
+	public async uncheckAll() {
 		let tasks = this._state.get<any[]>('tasks', []);
 		tasks.forEach(t => t.completed = false);
-		this._state.update('tasks', tasks);
-		this._updateWebview();
+		await this._state.update('tasks', tasks);
+		this._updateWebview(tasks);
 	}
 
-	private addTask(title: string) {
+	private async addTask(title: string) {
 		const tasks = this._state.get<any[]>('tasks', []);
-		tasks.push({ id: Date.now().toString(), title, completed: false });
-		this._state.update('tasks', tasks);
-		this._updateWebview();
+		tasks.push({
+			id: Date.now().toString(),
+			title,
+			category: 'Active',
+			dueDate: null
+		});
+		await this._state.update('tasks', tasks);
+		this._updateWebview(tasks);
 	}
 
-	private toggleTask(id: string) {
+	private async updateTitle(id: string, title: string) {
 		const tasks = this._state.get<any[]>('tasks', []);
 		const task = tasks.find(t => t.id === id);
 		if (task) {
-			task.completed = !task.completed;
-			this._state.update('tasks', tasks);
-			this._updateWebview();
+			task.title = title;
+			await this._state.update('tasks', tasks);
+			this._updateWebview(tasks);
 		}
 	}
 
-	private deleteTask(id: string) {
+	private async changeCategory(id: string, category: string) {
+		const tasks = this._state.get<any[]>('tasks', []);
+		const task = tasks.find(t => t.id === id);
+		if (task) {
+			task.category = category;
+			// Keep 'completed' in sync for legacy code/icons if necessary, 
+			// though we should eventually fully transition to category.
+			task.completed = (category === 'Completed');
+			await this._state.update('tasks', tasks);
+			this._updateWebview(tasks);
+		}
+	}
+
+	private async toggleTask(id: string) {
+		const tasks = this._state.get<any[]>('tasks', []);
+		const task = tasks.find(t => t.id === id);
+		if (task) {
+			const oldCategory = task.category || (task.completed ? 'Completed' : 'Active');
+			if (oldCategory === 'Completed') {
+				task.category = 'Active';
+				task.completed = false;
+			} else {
+				task.category = 'Completed';
+				task.completed = true;
+			}
+			await this._state.update('tasks', tasks);
+			this._updateWebview(tasks);
+		}
+	}
+
+	private async deleteTask(id: string) {
 		let tasks = this._state.get<any[]>('tasks', []);
 		tasks = tasks.filter(t => t.id !== id);
-		this._state.update('tasks', tasks);
-		this._updateWebview();
+		await this._state.update('tasks', tasks);
+		this._updateWebview(tasks);
 	}
 
-	private reorderTasks(newTasks: any[]) {
-		this._state.update('tasks', newTasks);
+	private async reorderTasks(newTasks: any[]) {
+		await this._state.update('tasks', newTasks);
+		this._updateWebview(newTasks);
 	}
 
-	private _updateWebview() {
+	private _updateWebview(tasks?: any[]) {
 		if (this._view) {
+			if (!tasks) {
+				tasks = this._state.get<any[]>('tasks', []);
+			}
+
+			// Migration logic
+			let migrated = false;
+			tasks.forEach(t => {
+				if (t.category === undefined) {
+					t.category = t.completed ? 'Completed' : 'Active';
+					t.dueDate = t.dueDate || null;
+					migrated = true;
+				}
+			});
+			if (migrated) {
+				this._state.update('tasks', tasks);
+			}
+
+			// Calculate Urgency Counts
+			let overdueCount = 0;
+			let soonCount = 0;
+			const now = new Date();
+			now.setHours(0, 0, 0, 0);
+
+			tasks.forEach(t => {
+				if (t.dueDate && t.category !== 'Completed') {
+					const due = new Date(t.dueDate);
+					due.setHours(0, 0, 0, 0);
+					const diffTime = due.getTime() - now.getTime();
+					const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+					if (diffDays < 0) overdueCount++;
+					else if (diffDays <= 3) soonCount++;
+				}
+			});
+
+			// Badge and Sidebar Icon Tooltip
+			const totalUrgent = overdueCount + soonCount;
+			const tooltipText = totalUrgent > 0 ? `${overdueCount} Overdue, ${soonCount} Due Soon` : 'Tasks';
+
+			this._view.badge = totalUrgent > 0 ? {
+				value: totalUrgent,
+				tooltip: tooltipText
+			} : undefined;
+
+			// Description on top of the sash (view title area)
+			this._view.description = totalUrgent > 0 ? `$(alert) ${overdueCount} $(history) ${soonCount}` : '';
+
 			this._view.webview.postMessage({
 				type: 'updateTasks',
-				tasks: this._state.get('tasks', []),
+				tasks: tasks,
 				workspaceName: vscode.workspace.name || 'No Workspace'
 			});
 		}
@@ -188,6 +276,26 @@ class TodoViewProvider implements vscode.WebviewViewProvider {
                         font-family: var(--vscode-font-family);
                         font-size: var(--vscode-font-size);
                         background-color: var(--vscode-sideBar-background);
+                    }
+                    #infoSection {
+                        padding: 8px 12px;
+                        background: var(--vscode-sideBarSectionHeader-background);
+                        border-bottom: 1px solid var(--vscode-sideBarSectionHeader-border, var(--vscode-divider));
+                        display: flex;
+                        flex-direction: row;
+                        gap: 4px;
+                        flex: 0 0 auto;
+                    }
+                    .header-row {
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                    }
+                    #workspaceName {
+                        font-weight: bold;
+                        font-size: 0.9em;
+                        text-transform: uppercase;
+                        opacity: 0.8;
                     }
                     .container {
                         display: flex;
@@ -216,68 +324,163 @@ class TodoViewProvider implements vscode.WebviewViewProvider {
                     input[type="text"]:focus {
                         border-color: var(--vscode-focusBorder);
                     }
-                    #activeSection, #completedSection {
+                    #todoSection, #activeSection, #completedSection, #backlogSection {
                         display: flex;
                         flex-direction: column;
                         min-height: 0;
-                        flex: 1; /* Both share space when expanded */
+                        flex: 1;
                     }
-                    #activeSection.collapsed, #completedSection.collapsed {
+                    #todoSection.collapsed, #activeSection.collapsed, #completedSection.collapsed, #backlogSection.collapsed {
                         flex: 0 0 auto;
                     }
-                    #activeTasks, #completedTasks {
+                    #todoTasks, #activeTasks, #completedTasks, #backlogTasks {
                         flex: 1;
                         overflow-y: auto;
                         padding: 0 10px;
                     }
-                    #completedSection {
+                    #completedSection, #backlogSection {
                         background: var(--vscode-sideBar-background);
                         border-top: 1px solid var(--vscode-sideBarSectionHeader-border, var(--vscode-divider));
                     }
                     .task-list {
+                        transition: background-color 0.2s;
+                    }
+                    .task-list.drag-over {
+                        background-color: var(--vscode-list-dropBackground, rgba(0, 122, 204, 0.1));
+                    }
+                    .task-list {
                         list-style: none;
-                        padding: 0;
+                        padding: 4px 0;
                         margin: 0;
                     }
                     .task-item {
                         display: flex;
-                        align-items: flex-start;
-                        gap: 8px;
-                        padding: 8px 4px;
-                        border-bottom: 1px solid var(--vscode-divider);
+                        align-items: center;
+                        gap: 10px;
+                        padding: 8px;
+                        margin-bottom: 6px;
+                        border-radius: 6px;
+                        border: 1px solid var(--vscode-widget-border, var(--vscode-divider));
+                        background: var(--vscode-sideBar-background);
+                        transition: all 0.2s;
                         cursor: grab;
-                        user-select: none;
+                        position: relative;
                     }
                     .task-item:hover {
+                        border-color: var(--vscode-focusBorder);
                         background: var(--vscode-list-hoverBackground);
                     }
                     .task-item.dragging {
                         opacity: 0.5;
                         background: var(--vscode-list-activeSelectionBackground);
                     }
+                    
+                    /* Category Theming */
+                    .task-item.cat-Active { border-left: 3px solid var(--vscode-charts-blue); }
+                    .task-item.cat-Completed { border-left: 3px solid var(--vscode-charts-green); }
+                    .task-item.cat-Backlog { border-left: 3px solid var(--vscode-charts-purple); }
+                    .task-item.cat-TODO { border-left: 3px solid var(--vscode-descriptionForeground); }
+
+                    .task-title {
+                        flex: 1;
+                        min-width: 0;
+                        font-size: 0.9em;
+                        word-break: break-all;
+                        white-space: pre-wrap;
+                        line-height: 1.4;
+                        color: var(--vscode-foreground);
+                        padding: 2px 4px;
+                        border-radius: 3px;
+                    }
                     .task-item.completed .task-title {
                         text-decoration: line-through;
                         opacity: 0.6;
                     }
-                    .task-title {
-                        flex: 1;
-                        word-break: break-all;
-                        white-space: pre-wrap;
-                        line-height: 1.4;
+                    .task-title.editing {
+                        background: var(--vscode-input-background);
+                        color: var(--vscode-input-foreground);
+                        outline: 1px solid var(--vscode-focusBorder);
+                        cursor: text;
                     }
-                    .delete-btn {
-                        background: transparent;
-                        color: var(--vscode-Foreground);
-                        padding: 0 5px;
-                        font-size: 1.2em;
-                        border: none;
-                        cursor: pointer;
+
+                    /* Due Status Dot */
+                    .due-dot {
+                        width: 8px;
+                        height: 8px;
+                        border-radius: 50%;
+                        flex-shrink: 0;
+                        background: var(--vscode-descriptionForeground);
+                    }
+                    .due-dot.overdue { background: var(--vscode-errorForeground); box-shadow: 0 0 5px var(--vscode-errorForeground); animation: pulse 2s infinite; }
+                    .due-dot.today { background: #ffa500; }
+                    .due-dot.soon { background: #ffcc00; }
+                    
+                    @keyframes pulse {
+                        0% { opacity: 1; }
+                        50% { opacity: 0.4; }
+                        100% { opacity: 1; }
+                    }
+
+                    /* Category Switcher (Segmented Control) */
+                    .switcher {
+                        display: flex;
+                        gap: 2px;
+                        background: var(--vscode-widget-border, var(--vscode-divider));
+                        padding: 2px;
+                        border-radius: 4px;
                         opacity: 0;
                         transition: opacity 0.2s;
                     }
-                    .task-item:hover .delete-btn {
+                    .task-item:hover .switcher {
                         opacity: 1;
                     }
+                    .switcher-btn {
+                        background: transparent;
+                        color: var(--vscode-foreground);
+                        border: none;
+                        padding: 3px;
+                        border-radius: 3px;
+                        cursor: pointer;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                    }
+                    .switcher-btn:hover {
+                        background: var(--vscode-toolbar-hoverBackground);
+                    }
+                    .switcher-btn svg {
+                        width: 14px;
+                        height: 14px;
+                    }
+                    .delete-task-btn {
+                        color: var(--vscode-errorForeground);
+                    }
+                    .delete-task-btn:hover {
+                        background: rgba(255, 0, 0, 0.1);
+                    }
+                    
+                    /* Webview Summary */
+                    .summary-bar {
+                        display: flex;
+                        gap: 12px;
+                        padding: 8px 12px;
+                        background: var(--vscode-sideBar-background);
+                        border-bottom: 1px solid var(--vscode-divider);
+                        font-size: 0.85em;
+                        opacity: 0.8;
+                    }
+                    .summary-item {
+                        display: flex;
+                        align-items: center;
+                        gap: 4px;
+                    }
+                    .summary-item svg {
+                        width: 12px;
+                        height: 12px;
+                    }
+                    .summary-item.Active { color: var(--vscode-charts-blue); }
+                    .summary-item.Completed { color: var(--vscode-charts-green); }
+                    .summary-item.Backlog { color: var(--vscode-charts-purple); }
                     .section-header {
                         flex: 0 0 auto;
                         background: var(--vscode-sideBarSectionHeader-background, var(--vscode-sideBar-background));
@@ -338,6 +541,35 @@ class TodoViewProvider implements vscode.WebviewViewProvider {
                         width: 16px;
                         height: 16px;
                     }
+                    .category-icon {
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        width: 14px;
+                        height: 14px;
+                        margin: 0 4px;
+                    }
+                    .category-icon svg {
+                        width: 14px;
+                        height: 14px;
+                    }
+                    .count-badge {
+                        background: var(--vscode-badge-background, #4d4d4d);
+                        color: var(--vscode-badge-foreground, #ffffff);
+                        padding: 0 6px;
+                        border-radius: 10px;
+                        font-size: 10px;
+                        margin-left: 6px;
+                        font-weight: normal;
+                        line-height: 14px;
+                        height: 14px;
+                        display: inline-block;
+                        text-transform: none;
+                    }
+                    .icon-TODO { color: var(--vscode-charts-blue); }
+                    .icon-Active { color: var(--vscode-charts-orange); }
+                    .icon-Completed { color: var(--vscode-charts-green); }
+                    .icon-Backlog { color: var(--vscode-charts-purple); }
                     .icon-btn {
                         background: transparent;
                         color: var(--vscode-foreground);
@@ -443,12 +675,29 @@ class TodoViewProvider implements vscode.WebviewViewProvider {
             <body>
                 <div class="container">
                     <div id="infoSection">
-                        <span id="workspaceName">Loading Workspace...</span>
-                        <div class="action-buttons">
-                            <button class="icon-btn" onclick="clearAll()" data-tooltip="Delete All">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-trash2-icon lucide-trash-2"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-                            </button>
+                        <div class="header-row">
+                            <span id="workspaceName">Loading Workspace...</span>
                         </div>
+                        <div class="action-buttons">
+                            <button class="icon-btn" onclick="clearAll()" data-tooltip="Delete All Tasks">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-trash2-icon lucide-trash-2"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 0 0 1 2-2h4a2 0 0 1 2 2v2"/></svg>
+                            </button>
+                            </div>
+                    </div>
+                    <div id="todoSection">
+                         <div class="section-header" onclick="toggleSection('todoSection')">
+                             <div class="header-left">
+                                 <div class="chevron">
+                                     <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M7.976 10.072l4.357-4.357.62.618L8.285 11l-.309.309L7.667 11 2.714 6.333l.619-.618 4.643 4.357z"/></svg>
+                                 </div>
+								 <div class="category-icon icon-Todo" id="todoHeaderIcon">
+									<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/></svg>
+                                 </div>
+								 <span>TODO</span>
+                                 <span class="count-badge" id="todoHeaderCount">0</span>
+                             </div>
+                         </div>
+                        <div id="todoTasks" class="task-list"></div>
                     </div>
                     <div id="activeSection">
                         <div class="section-header" onclick="toggleSection('activeSection')">
@@ -456,7 +705,12 @@ class TodoViewProvider implements vscode.WebviewViewProvider {
                                 <div class="chevron">
                                     <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M7.976 10.072l4.357-4.357.62.618L8.285 11l-.309.309L7.667 11 2.714 6.333l.619-.618 4.643 4.357z"/></svg>
                                 </div>
+								<div class="category-icon icon-Active" id="activeHeaderIcon">
+									<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                                </div>	
                                 <span>Active Tasks</span>
+
+                                <span class="count-badge" id="activeHeaderCount">0</span>
                             </div>
                             <div class="action-buttons" onclick="event.stopPropagation()">
                                 <button class="clear-btn" onclick="clearActive()" data-tooltip="Delete Active">
@@ -498,7 +752,11 @@ class TodoViewProvider implements vscode.WebviewViewProvider {
                                 <div class="chevron">
                                     <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M7.976 10.072l4.357-4.357.62.618L8.285 11l-.309.309L7.667 11 2.714 6.333l.619-.618 4.643 4.357z"/></svg>
                                 </div>
+                                <div class="category-icon icon-Completed" id="completedHeaderIcon">
+										<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                                </div>
                                 <span>Completed</span>
+                                <span class="count-badge" id="completedHeaderCount">0</span>
                             </div>
                             <div class="action-buttons" onclick="event.stopPropagation()">
                                 <button class="clear-btn" onclick="clearCompleted()" data-tooltip="Delete Completed">
@@ -529,26 +787,72 @@ class TodoViewProvider implements vscode.WebviewViewProvider {
                         <div id="completedTasks" class="task-list"></div>
 
                     </div>
+                    <div id="backlogSection">
+                        <div class="section-header" onclick="toggleSection('backlogSection')">
+                            <div class="header-left">
+                                <div class="chevron">
+                                    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M7.976 10.072l4.357-4.357.62.618L8.285 11l-.309.309L7.667 11 2.714 6.333l.619-.618 4.643 4.357z"/></svg>
+                                </div>
+                                <div class="category-icon icon-Backlog" id="backlogHeaderIcon">
+										<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>
+                                </div>
+                                <span>Backlog</span>
+                                <span class="count-badge" id="backlogHeaderCount">0</span>
+                            </div>
+                        </div>
+                        <div id="backlogTasks" class="task-list"></div>
+                    </div>
                 </div>
 
                 <script>
                     const vscode = acquireVsCodeApi();
                     const input = document.getElementById('taskInput');
-                    const activeList = document.getElementById('activeTasks');
-                    const activeSection = document.getElementById('activeSection');
+                    const todoList = document.getElementById('todoTasks');
+                    const todoSection = document.getElementById('todoSection');
                     const completedList = document.getElementById('completedTasks');
                     const completedSection = document.getElementById('completedSection');
+                    const backlogList = document.getElementById('backlogTasks');
+                    const backlogSection = document.getElementById('backlogSection');
                     const workspaceNameEl = document.getElementById('workspaceName');
 
+                    const categoryIcons = {
+                        TODO: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/></svg>',
+                        Active: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></svg>',
+                        Completed: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
+                        Backlog: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>'
+                    };
+
+                    // Set up context drop zones
+                    [
+                        { el: todoList, cat: 'TODO' },
+                        { el: activeList, cat: 'Active' },
+                        { el: completedList, cat: 'Completed' },
+                        { el: backlogList, cat: 'Backlog' }
+                    ].forEach(zone => {
+                        zone.el.addEventListener('dragover', (e) => {
+                            handleDragOver(e);
+                            zone.el.classList.add('drag-over');
+                        });
+                        zone.el.addEventListener('dragleave', () => {
+                            zone.el.classList.remove('drag-over');
+                        });
+                        zone.el.addEventListener('drop', (e) => {
+                            zone.el.classList.remove('drag-over');
+                            if (e.target === zone.el) {
+                                handleSectionDrop(e, zone.cat);
+                            }
+                        });
+                    });
+ 
                     // Tooltip Logic
                     const tooltipEl = document.createElement('div');
                     tooltipEl.className = 'custom-tooltip';
                     document.body.appendChild(tooltipEl);
-
+ 
                     document.addEventListener('mouseover', e => {
                         const target = e.target.closest('[data-tooltip]');
                         if (target) {
-                            tooltipEl.textContent = target.getAttribute('data-tooltip');
+                            tooltipEl.innerHTML = target.getAttribute('data-tooltip');
                             tooltipEl.style.display = 'block';
                             
                             const rect = target.getBoundingClientRect();
@@ -579,7 +883,7 @@ class TodoViewProvider implements vscode.WebviewViewProvider {
                             tooltipEl.style.left = left + 'px';
                         }
                     });
-
+ 
                     document.addEventListener('mouseout', e => {
                         if (e.target.closest('[data-tooltip]')) {
                             tooltipEl.style.display = 'none';
@@ -626,50 +930,144 @@ class TodoViewProvider implements vscode.WebviewViewProvider {
                             if (message.workspaceName) {
                                 workspaceNameEl.textContent = message.workspaceName;
                             }
+                            
                             vscode.setState({ tasks: currentTasks, workspaceName: message.workspaceName, collapsedStates });
                             renderTasks(currentTasks);
                         }
                     });
 
-                    function renderTasks(tasks) {
+                      function renderTasks(tasks) {
+                        todoList.innerHTML = '';
                         activeList.innerHTML = '';
                         completedList.innerHTML = '';
-    
-                        let hasCompleted = false;
-                        let hasActive = false;
+                        backlogList.innerHTML = '';
+
+                        let counts = { TODO: 0, Active: 0, Completed: 0, Backlog: 0 };
 
                         tasks.forEach((task, index) => {
+                            const category = task.category || 'Active';
+                            counts[category]++;
+
                             const li = document.createElement('div');
-                            li.className = 'task-item' + (task.completed ? ' completed' : '');
+                            li.className = \`task-item cat-\${category}\` + (category === 'Completed' ? ' completed' : '');
                             li.draggable = true;
                             li.dataset.id = task.id;
                             li.dataset.index = index;
-                            
+
+                            const dueStatus = getDueStatus(task.dueDate);
+                            const dueDateStr = formatDueDate(task.dueDate, dueStatus);
+                            li.setAttribute('data-tooltip', dueDateStr);
+
+                            let switcherHtml = '';
+                            Object.keys(categoryIcons).forEach(cat => {
+                                if (cat !== category) {
+                                    switcherHtml += \`
+                                        <button class="switcher-btn" onclick="event.stopPropagation(); changeCategory('\${task.id}', '\${cat}')">
+                                            \${categoryIcons[cat]}
+                                        </button>
+                                    \`;
+                                }
+                            });
+
                             li.innerHTML = \`
-                                <input type="checkbox" \${task.completed ? 'checked' : ''} onclick="event.stopPropagation(); toggleTask('\${task.id}')" />
+                                <div class="due-dot \${dueStatus}"></div>
                                 <span class="task-title">\${escapeHtml(task.title)}</span>
-                                <button class="delete-btn" onclick="event.stopPropagation(); deleteTask('\${task.id}')" title="Delete task">×</button>
+                                <div class="switcher">
+                                    \${switcherHtml}
+                                    <button class="switcher-btn delete-task-btn" onclick="event.stopPropagation(); deleteTask('\${task.id}')">
+                                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+                                    </button>
+                                </div>
                             \`;
+
+                            li.addEventListener('dblclick', (e) => {
+                                if (e.target.closest('.switcher')) return;
+                                const titleEl = li.querySelector('.task-title');
+                                if (titleEl.classList.contains('editing')) return;
+
+                                titleEl.contentEditable = 'true';
+                                titleEl.focus();
+                                titleEl.classList.add('editing');
+                                document.execCommand('selectAll', false, null);
+
+                                function finishEdit() {
+                                    titleEl.contentEditable = 'false';
+                                    titleEl.classList.remove('editing');
+                                    const newTitle = titleEl.innerText.trim();
+                                    if (newTitle && newTitle !== task.title) {
+                                        vscode.postMessage({ type: 'updateTitle', id: task.id, title: newTitle });
+                                    } else {
+                                        titleEl.innerText = task.title;
+                                    }
+                                }
+
+                                titleEl.addEventListener('blur', finishEdit, { once: true });
+                                titleEl.addEventListener('keydown', (e) => {
+                                    if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        titleEl.blur();
+                                    }
+                                    if (e.key === 'Escape') {
+                                        titleEl.innerText = task.title;
+                                        titleEl.blur();
+                                    }
+                                });
+                            });
 
                             li.addEventListener('dragstart', handleDragStart);
                             li.addEventListener('dragover', handleDragOver);
                             li.addEventListener('drop', handleDrop);
                             li.addEventListener('dragend', handleDragEnd);
 
-                            if (task.completed) {
-                                completedList.appendChild(li);
-                                hasCompleted = true;
-                            } else {
-                                activeList.appendChild(li);
-                                hasActive = true;
-                            }
+                            if (category === 'TODO') todoList.appendChild(li);
+                            else if (category === 'Active') activeList.appendChild(li);
+                            else if (category === 'Completed') completedList.appendChild(li);
+                            else if (category === 'Backlog') backlogList.appendChild(li);
                         });
-    
+
+                        // Update Header Icons and Counts
+                        Object.keys(counts).forEach(cat => {
+                            const iconEl = document.getElementById(cat.toLowerCase() + 'HeaderIcon');
+                            const countEl = document.getElementById(cat.toLowerCase() + 'HeaderCount');
+                            if (iconEl) iconEl.innerHTML = categoryIcons[cat];
+                            if (countEl) countEl.textContent = counts[cat];
+                        });
+                    }
+
+                    function getDueStatus(dueDate) {
+                        if (!dueDate) return 'none';
+                        const today = new Date();
+                        today.setHours(0, 0, 0, 0);
+                        const due = new Date(dueDate);
+                        due.setHours(0, 0, 0, 0);
+                        const diffTime = due.getTime() - today.getTime();
+                        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                        if (diffDays < 0) return 'overdue';
+                        if (diffDays === 0) return 'today';
+                        if (diffDays <= 3) return 'soon';
+                        return 'normal';
+                    }
+
+                    function formatDueDate(dueDate, status) {
+                        if (!dueDate) return 'No due date';
+                        const due = new Date(dueDate);
+                        if (status === 'overdue') return 'Overdue';
+                        if (status === 'today') return 'Due Today';
+                        if (status === 'soon') return 'Due Soon';
+                        return 'Due ' + due.toLocaleDateString();
+                    }
+
+                    function changeCategory(id, category) {
+                        vscode.postMessage({ type: 'changeCategory', id, category });
                     }
 
                     let dragSourceEl = null;
 
                     function handleDragStart(e) {
+                        if (e.target.closest('.task-title.editing')) {
+                            e.preventDefault();
+                            return;
+                        }
                         dragSourceEl = this;
                         e.dataTransfer.effectAllowed = 'move';
                         this.classList.add('dragging');
@@ -689,19 +1087,62 @@ class TodoViewProvider implements vscode.WebviewViewProvider {
                         e.preventDefault();
 
                         if (dragSourceEl && dragSourceEl !== this) {
-                            const sourceIndex = parseInt(dragSourceEl.dataset.index);
-                            const targetIndex = parseInt(this.dataset.index);
+                            const sourceId = dragSourceEl.dataset.id;
+                            const targetId = this.dataset.id;
                             
-                            const newTasks = [...currentTasks];
-                            const [movedTask] = newTasks.splice(sourceIndex, 1);
-                            newTasks.splice(targetIndex, 0, movedTask);
+                            // Determine target category from the item's classes
+                            const targetCategory = Array.from(this.classList)
+                                .find(c => c.startsWith('cat-'))
+                                ?.replace('cat-', '') || 'Active';
                             
-                            currentTasks = newTasks;
-                            vscode.setState({ tasks: currentTasks });
-                            renderTasks(newTasks);
-                            vscode.postMessage({ type: 'reorderTasks', tasks: newTasks });
+                            const sourceIndex = currentTasks.findIndex(t => t.id === sourceId);
+                            const targetIndex = currentTasks.findIndex(t => t.id === targetId);
+                            
+                            if (sourceIndex !== -1 && targetIndex !== -1) {
+                                const newTasks = [...currentTasks];
+                                const [movedTask] = newTasks.splice(sourceIndex, 1);
+                                
+                                // Update category
+                                movedTask.category = targetCategory;
+                                movedTask.completed = (targetCategory === 'Completed');
+                                
+                                // We need to re-splice based on the new index after the first splice
+                                const finalTargetIndex = newTasks.findIndex(t => t.id === targetId);
+                                newTasks.splice(finalTargetIndex, 0, movedTask);
+                                
+                                currentTasks = newTasks;
+                                vscode.setState({ tasks: currentTasks, workspaceName: workspaceNameEl.textContent, collapsedStates });
+                                renderTasks(newTasks);
+                                vscode.postMessage({ type: 'reorderTasks', tasks: newTasks });
+                            }
                         }
                         return false;
+                    }
+
+                    function handleSectionDrop(e, targetCategory) {
+                        e.preventDefault();
+                        if (dragSourceEl) {
+                            const sourceId = dragSourceEl.dataset.id;
+                            const sourceIndex = currentTasks.findIndex(t => t.id === sourceId);
+                            
+                            if (sourceIndex !== -1) {
+                                const newTasks = [...currentTasks];
+                                const [movedTask] = newTasks.splice(sourceIndex, 1);
+                                
+                                movedTask.category = targetCategory;
+                                movedTask.completed = (targetCategory === 'Completed');
+                                
+                                // Insert at the end of this category's block or just at the end of the array
+                                // Since renderTasks just appends to the correct list, the array order 
+                                // determines relative order within the list.
+                                newTasks.push(movedTask);
+                                
+                                currentTasks = newTasks;
+                                vscode.setState({ tasks: currentTasks, workspaceName: workspaceNameEl.textContent, collapsedStates });
+                                renderTasks(newTasks);
+                                vscode.postMessage({ type: 'reorderTasks', tasks: newTasks });
+                            }
+                        }
                     }
 
                     function handleDragEnd() {
