@@ -81,6 +81,12 @@ class TodoViewProvider implements vscode.WebviewViewProvider {
 				case 'clearAll':
 					this.clearAll();
 					break;
+				case 'clearCategory':
+					this.clearCategory(data.category);
+					break;
+				case 'moveCategoryToActive':
+					this.moveCategoryToActive(data.category);
+					break;
 				case 'changeCategory':
 					this.changeCategory(data.id, data.category);
 					break;
@@ -136,6 +142,29 @@ class TodoViewProvider implements vscode.WebviewViewProvider {
 	public async uncheckAll() {
 		let tasks = this._state.get<any[]>('tasks', []);
 		tasks.forEach(t => t.completed = false);
+		await this._state.update('tasks', tasks);
+		this._updateWebview(tasks);
+	}
+
+	public async clearCategory(category: string) {
+		let tasks = this._state.get<any[]>('tasks', []);
+		tasks = tasks.filter(t => {
+			const taskCat = t.category || (t.completed ? 'Completed' : 'Active');
+			return taskCat !== category;
+		});
+		await this._state.update('tasks', tasks);
+		this._updateWebview(tasks);
+	}
+
+	public async moveCategoryToActive(category: string) {
+		let tasks = this._state.get<any[]>('tasks', []);
+		tasks.forEach(t => {
+			const taskCat = t.category || (t.completed ? 'Completed' : 'Active');
+			if (taskCat === category) {
+				t.category = 'Active';
+				t.completed = false;
+			}
+		});
 		await this._state.update('tasks', tasks);
 		this._updateWebview(tasks);
 	}
@@ -356,19 +385,18 @@ class TodoViewProvider implements vscode.WebviewViewProvider {
                     .task-item {
                         display: flex;
                         align-items: center;
-                        gap: 10px;
-                        padding: 8px;
-                        margin-bottom: 6px;
-                        border-radius: 6px;
+                        gap: 4px;
+                        padding: 0 4px;
+                        margin-bottom: 2px;
                         border: 1px solid var(--vscode-widget-border, var(--vscode-divider));
                         background: var(--vscode-sideBar-background);
                         transition: all 0.2s;
                         cursor: grab;
                         position: relative;
+                        overflow: hidden;
                     }
                     .task-item:hover {
                         border-color: var(--vscode-focusBorder);
-                        background: var(--vscode-list-hoverBackground);
                     }
                     .task-item.dragging {
                         opacity: 0.5;
@@ -376,10 +404,10 @@ class TodoViewProvider implements vscode.WebviewViewProvider {
                     }
                     
                     /* Category Theming */
-                    .task-item.cat-Active { border-left: 3px solid var(--vscode-charts-blue); }
-                    .task-item.cat-Completed { border-left: 3px solid var(--vscode-charts-green); }
-                    .task-item.cat-Backlog { border-left: 3px solid var(--vscode-charts-purple); }
-                    .task-item.cat-TODO { border-left: 3px solid var(--vscode-descriptionForeground); }
+                    .task-item.cat-Active { border-left: 2px solid var(--vscode-charts-blue); }
+                    .task-item.cat-Completed { border-left: 2px solid var(--vscode-charts-green); }
+                    .task-item.cat-Backlog { border-left: 2px solid var(--vscode-charts-purple); }
+                    .task-item.cat-TODO { border-left: 2px solid var(--vscode-descriptionForeground); }
 
                     .task-title {
                         flex: 1;
@@ -389,8 +417,8 @@ class TodoViewProvider implements vscode.WebviewViewProvider {
                         white-space: pre-wrap;
                         line-height: 1.4;
                         color: var(--vscode-foreground);
-                        padding: 2px 4px;
-                        border-radius: 3px;
+                        padding: 6px 4px;
+                        margin-right: 8px;
                     }
                     .task-item.completed .task-title {
                         text-decoration: line-through;
@@ -401,6 +429,8 @@ class TodoViewProvider implements vscode.WebviewViewProvider {
                         color: var(--vscode-input-foreground);
                         outline: 1px solid var(--vscode-focusBorder);
                         cursor: text;
+                        position: relative;
+                        z-index: 20;
                     }
 
                     /* Due Status Dot */
@@ -423,30 +453,45 @@ class TodoViewProvider implements vscode.WebviewViewProvider {
 
                     /* Category Switcher (Segmented Control) */
                     .switcher {
+                        position: absolute;
+                        right: 0;
+                        top: 0;
+                        bottom: 0;
                         display: flex;
-                        gap: 2px;
-                        background: var(--vscode-widget-border, var(--vscode-divider));
-                        padding: 2px;
-                        border-radius: 4px;
+                        align-items: center;
+                        gap: 4px;
+                        padding: 0 8px 0 48px;
+                        background: linear-gradient(to left, rgba(0, 0, 0, 0.9) 40%, transparent 100%);
                         opacity: 0;
-                        transition: opacity 0.2s;
+                        transition: opacity 0.2s ease-in-out;
+                        pointer-events: none; /* Container is non-blocking */
+                        z-index: 10;
                     }
                     .task-item:hover .switcher {
                         opacity: 1;
                     }
                     .switcher-btn {
                         background: transparent;
-                        color: var(--vscode-foreground);
+                        color: #ffffff;
                         border: none;
-                        padding: 3px;
-                        border-radius: 3px;
+                        padding: 4px;
+                        border-radius: 4px;
                         cursor: pointer;
                         display: flex;
                         align-items: center;
                         justify-content: center;
+                        opacity: 0.8;
+                        transition: all 0.2s;
+                        pointer-events: auto; /* Buttons are interactive */
                     }
                     .switcher-btn:hover {
-                        background: var(--vscode-toolbar-hoverBackground);
+                        opacity: 1;
+                        background: rgba(255, 255, 255, 0.15);
+                        transform: scale(1.1);
+                    }
+                    .delete-task-btn:hover {
+                        color: var(--vscode-errorForeground, #ff5555);
+                        background: rgba(255, 0, 0, 0.2);
                     }
                     .switcher-btn svg {
                         width: 14px;
@@ -566,10 +611,10 @@ class TodoViewProvider implements vscode.WebviewViewProvider {
                         display: inline-block;
                         text-transform: none;
                     }
-                    .icon-TODO { color: var(--vscode-charts-blue); }
-                    .icon-Active { color: var(--vscode-charts-orange); }
-                    .icon-Completed { color: var(--vscode-charts-green); }
-                    .icon-Backlog { color: var(--vscode-charts-purple); }
+                     .icon-TODO { color: var(--vscode-charts-blue); }
+                     .icon-Active { color: var(--vscode-charts-orange); }
+                     .icon-Completed { color: var(--vscode-charts-green); }
+                     .icon-Backlog { color: var(--vscode-charts-purple); }
                     .icon-btn {
                         background: transparent;
                         color: var(--vscode-foreground);
@@ -690,11 +735,47 @@ class TodoViewProvider implements vscode.WebviewViewProvider {
                                  <div class="chevron">
                                      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M7.976 10.072l4.357-4.357.62.618L8.285 11l-.309.309L7.667 11 2.714 6.333l.619-.618 4.643 4.357z"/></svg>
                                  </div>
-								 <div class="category-icon icon-Todo" id="todoHeaderIcon">
+								 <div class="category-icon icon-TODO" id="todoHeaderIcon">
 									<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/></svg>
                                  </div>
 								 <span>TODO</span>
                                  <span class="count-badge" id="todoHeaderCount">0</span>
+                             </div>
+                             <div class="action-buttons" onclick="event.stopPropagation()">
+                                 <button class="icon-btn" onclick="activateAllTodo()" data-tooltip="Activate All TODO">
+                                     <svg
+                                        xmlns="http://www.w3.org/2000/svg"
+                                        width="16"
+                                        height="16"
+                                        viewBox="0 0 24 24"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        stroke-width="2"
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        >
+                                        <path d="M21 5H3"/><path d="M10 12H3"/><path d="M10 19H3"/><path d="M15 12.003a1 1 0 0 1 1.517-.859l4.997 2.997a1 1 0 0 1 0 1.718l-4.997 2.997a1 1 0 0 1-1.517-.86z"/>
+                                    </svg>
+                                 </button>
+                                 <button class="clear-btn" onclick="clearTodo()" data-tooltip="Delete TODO">
+                                     <svg
+                                        xmlns="http://www.w3.org/2000/svg"
+                                        width="16"
+                                        height="16"
+                                        viewBox="0 0 24 24"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        stroke-width="2"
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        >
+                                        <path d="M11 12H3" />
+                                        <path d="M11 19H3" />
+                                        <path d="m15.5 13.5 5 5" />
+                                        <path d="m20.5 13.5-5 5" />
+                                        <path d="M21 5H3" />
+                                    </svg>
+                                 </button>
                              </div>
                          </div>
                         <div id="todoTasks" class="task-list"></div>
@@ -797,9 +878,30 @@ class TodoViewProvider implements vscode.WebviewViewProvider {
 										<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>
                                 </div>
                                 <span>Backlog</span>
-                                <span class="count-badge" id="backlogHeaderCount">0</span>
-                            </div>
-                        </div>
+                                 <span class="count-badge" id="backlogHeaderCount">0</span>
+                             </div>
+                             <div class="action-buttons" onclick="event.stopPropagation()">
+                                 <button class="clear-btn" onclick="clearBacklog()" data-tooltip="Delete Backlog">
+                                     <svg
+                                        xmlns="http://www.w3.org/2000/svg"
+                                        width="16"
+                                        height="16"
+                                        viewBox="0 0 24 24"
+                                        fill="none"
+                                        stroke="currentColor"
+                                        stroke-width="2"
+                                        stroke-linecap="round"
+                                        stroke-linejoin="round"
+                                        >
+                                        <path d="M11 12H3" />
+                                        <path d="M11 19H3" />
+                                        <path d="m15.5 13.5 5 5" />
+                                        <path d="m20.5 13.5-5 5" />
+                                        <path d="M21 5H3" />
+                                    </svg>
+                                 </button>
+                             </div>
+                         </div>
                         <div id="backlogTasks" class="task-list"></div>
                     </div>
                 </div>
@@ -809,6 +911,8 @@ class TodoViewProvider implements vscode.WebviewViewProvider {
                     const input = document.getElementById('taskInput');
                     const todoList = document.getElementById('todoTasks');
                     const todoSection = document.getElementById('todoSection');
+                    const activeList = document.getElementById('activeTasks');
+                    const activeSection = document.getElementById('activeSection');
                     const completedList = document.getElementById('completedTasks');
                     const completedSection = document.getElementById('completedSection');
                     const backlogList = document.getElementById('backlogTasks');
@@ -1168,8 +1272,24 @@ class TodoViewProvider implements vscode.WebviewViewProvider {
                         vscode.postMessage({ type: 'clearCompleted' });
                     }
 
-                    function clearActive() {
+                     function clearActive() {
                         vscode.postMessage({ type: 'clearActive' });
+                    }
+
+                     function clearTodo() {
+                        vscode.postMessage({ type: 'clearCategory', category: 'TODO' });
+                    }
+
+                    function activateAllTodo() {
+                        vscode.postMessage({ type: 'moveCategoryToActive', category: 'TODO' });
+                    }
+
+                    function clearBacklog() {
+                        vscode.postMessage({ type: 'clearCategory', category: 'Backlog' });
+                    }
+
+                    function clearCategory(category) {
+                        vscode.postMessage({ type: 'clearCategory', category: category });
                     }
 
                     function checkAll() {
