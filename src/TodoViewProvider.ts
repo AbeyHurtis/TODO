@@ -181,7 +181,11 @@ export class TodoViewProvider implements vscode.WebviewViewProvider {
 		}
 	}
 
-	private async changeCategory(id: string, category: string) {
+	public getTasks(): any[] {
+		return this._state.get<any[]>('tasks', []);
+	}
+
+	public async changeCategory(id: string, category: string) {
 		const tasks = this._state.get<any[]>('tasks', []);
 		const task = tasks.find(t => t.id === id);
 		if (task) {
@@ -250,8 +254,9 @@ export class TodoViewProvider implements vscode.WebviewViewProvider {
 				const category = String(t.category || (t.completed ? 'Completed' : 'Active'));
 				const isCompleted = category === 'Completed' || !!t.completed;
 				const isBacklog = category === 'Backlog';
+				const isBlocked = category === 'Blocked';
 
-				if (t.dueDate && !isCompleted && !isBacklog) {
+				if (t.dueDate && !isCompleted && !isBacklog && !isBlocked) {
 					const due = new Date(t.dueDate);
 					if (isNaN(due.getTime())) return;
 
@@ -311,12 +316,12 @@ export class TodoViewProvider implements vscode.WebviewViewProvider {
                     </div>
                     <div class="input-area">
                         <div class="input-container">
-                            <textarea id="taskInput" placeholder="Add a task, press Enter..." autofocus rows="1"></textarea>
+                            <textarea id="taskInput" placeholder="Add a task, press Enter..." rows="1"></textarea>
                             
-                            <div class="date-wrapper" id="dateWrapper" data-tooltip="Set Due Date" onclick="document.getElementById('dueDateInput').showPicker()">
-							<span class="calander-icon"></span>
-							<input class="date-input" type="date" id="dueDateInput" />
-                            </div>
+                            <label class="date-wrapper" id="dateWrapper" data-tooltip="Set Due Date">
+								<span class="calander-icon"></span>
+								<input class="date-input" type="date" id="dueDateInput" />
+                            </label>
 
                         </div>
                     </div>
@@ -334,6 +339,9 @@ export class TodoViewProvider implements vscode.WebviewViewProvider {
                     `)}
                     ${this._getSectionHtml('backlog', 'Backlog', ICONS.BACKLOG, `
                         <button class="clear-btn" onclick="clearBacklog()" data-tooltip="Delete Backlog">${ICONS.DELETE_CATEGORY}</button>
+                    `)}
+                    ${this._getSectionHtml('blocked', 'Blocked / LLM Failed', ICONS.BLOCKED, `
+                        <button class="clear-btn" onclick="clearBlocked()" data-tooltip="Delete Blocked">${ICONS.DELETE_CATEGORY}</button>
                     `)}
                 </div>
 

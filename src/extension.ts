@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { TodoViewProvider } from './TodoViewProvider';
+import { GitManager } from './gitManager';
 
 export function activate(context: vscode.ExtensionContext) {
 	const provider = new TodoViewProvider(context.extensionUri, context.globalState);
@@ -7,6 +8,8 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(
 		vscode.window.registerWebviewViewProvider(TodoViewProvider.viewType, provider)
 	);
+
+	const gitManager = new GitManager(provider);
 
 	context.subscriptions.push(
 		vscode.commands.registerCommand('todo.addTask', () => {

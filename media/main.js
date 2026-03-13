@@ -10,13 +10,16 @@ const completedList = document.getElementById('completedTasks');
 const completedSection = document.getElementById('completedSection');
 const backlogList = document.getElementById('backlogTasks');
 const backlogSection = document.getElementById('backlogSection');
+const blockedList = document.getElementById('blockedTasks');
+const blockedSection = document.getElementById('blockedSection');
 const workspaceNameEl = document.getElementById('workspaceName');
 
 const categoryIcons = {
     TODO: ICONS.TODO,
     Active: ICONS.ACTIVE,
     Completed: ICONS.COMPLETED,
-    Backlog: ICONS.BACKLOG
+    Backlog: ICONS.BACKLOG,
+    Blocked: ICONS.BLOCKED
 };
 
 // Set up context drop zones
@@ -24,21 +27,24 @@ const categoryIcons = {
     { el: todoList, cat: 'TODO' },
     { el: activeList, cat: 'Active' },
     { el: completedList, cat: 'Completed' },
-    { el: backlogList, cat: 'Backlog' }
+    { el: backlogList, cat: 'Backlog' },
+    { el: blockedList, cat: 'Blocked' }
 ].forEach(zone => {
-    zone.el.addEventListener('dragover', (e) => {
-        handleDragOver(e);
-        zone.el.classList.add('drag-over');
-    });
-    zone.el.addEventListener('dragleave', () => {
-        zone.el.classList.remove('drag-over');
-    });
-    zone.el.addEventListener('drop', (e) => {
-        zone.el.classList.remove('drag-over');
-        if (e.target === zone.el) {
-            handleSectionDrop(e, zone.cat);
-        }
-    });
+    if (zone.el) {
+        zone.el.addEventListener('dragover', (e) => {
+            handleDragOver(e);
+            zone.el.classList.add('drag-over');
+        });
+        zone.el.addEventListener('dragleave', () => {
+            zone.el.classList.remove('drag-over');
+        });
+        zone.el.addEventListener('drop', (e) => {
+            zone.el.classList.remove('drag-over');
+            if (e.target === zone.el) {
+                handleSectionDrop(e, zone.cat);
+            }
+        });
+    }
 });
 
 // Tooltip Logic
@@ -51,31 +57,31 @@ document.addEventListener('mouseover', e => {
     if (target) {
         tooltipEl.innerHTML = target.getAttribute('data-tooltip');
         tooltipEl.style.display = 'block';
-        
+
         const rect = target.getBoundingClientRect();
         const tooltipRect = tooltipEl.getBoundingClientRect();
-        
+
         // Position below the element, centered
         let top = rect.bottom + 8;
         let left = rect.left + (rect.width / 2) - (tooltipRect.width / 2);
-        
+
         // Safety checks for viewport edges
         if (left < 6) left = 6;
         if (left + tooltipRect.width > window.innerWidth - 6) {
             left = window.innerWidth - tooltipRect.width - 6;
         }
-        
+
         // Adjust pointer (arrow) position to stay centered under the button
         const pointerOffset = (rect.left + rect.width / 2) - left;
         tooltipEl.style.setProperty('--pointer-left', pointerOffset + 'px');
-        
+
         if (top + tooltipRect.height > window.innerHeight) {
             top = rect.top - tooltipRect.height - 8;
             tooltipEl.classList.add('top-pointer');
         } else {
             tooltipEl.classList.remove('top-pointer');
         }
-        
+
         tooltipEl.style.top = top + 'px';
         tooltipEl.style.left = left + 'px';
     }
@@ -114,6 +120,13 @@ if (currentTasks.length > 0) {
 
 vscode.postMessage({ type: 'ready' });
 
+// Fix for cross-origin focus restriction
+window.addEventListener('load', () => {
+    setTimeout(() => {
+        input.focus();
+    }, 100);
+});
+
 // Auto-expand textarea
 input.addEventListener('input', () => {
     input.style.height = 'auto';
@@ -130,21 +143,81 @@ dateInput.addEventListener('change', () => {
     }
 });
 
+function openDatePicker() {
+    console.log("Requesting Date Picker...");
+    try {
+        // First ensure focus
+        dateInput.focus();
+        
+        // Try showPicker first if available (modern way)
+        if (typeof dateInput.showPicker === 'function') {
+            try {
+                dateInput.showPicker();
+                console.log("showPicker() successful");
+                return;
+            } catch (secErr) {
+                console.warn("showPicker blocked by security policy, falling back to click()");
+            }
+        }
+        
+        // Fallback to click()
+        dateInput.click();
+        console.log("dateInput.click() executed");
+    } catch (err) {
+        console.error('Error triggering date input:', err);
+    }
+}
+
+dateWrapper.addEventListener('click', (e) => {
+    // Ensure we don't recurse if the click was already on the input or meant for it
+    if (e.target === dateWrapper || e.target.classList.contains('calander-icon')) {
+        e.preventDefault();
+        openDatePicker();
+    }
+});
+
+function submitTask() {
+    const val = input.value.trim();
+    if (val) {
+        vscode.postMessage({
+            type: 'addTask',
+            value: val,
+            dueDate: dateInput.value || null
+        });
+        input.value = '';
+        input.style.height = 'auto';
+        dateInput.value = '';
+        dateWrapper.classList.remove('has-date');
+        dateWrapper.setAttribute('data-tooltip', 'Set Due Date');
+        input.focus();
+    }
+}
+
 input.addEventListener('keydown', (e) => {
+    if (e.key === 'Tab') {
+        // Case: User wants to set a date.
+        // We stop the focus from leaving the webview and instead 
+        // focus our own date input.
+        e.preventDefault();
+        dateInput.focus();
+        console.log("Tab pressed: Focus moved to dateInput");
+    }
     if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
-        const val = input.value.trim();
-        if (val) {
-            vscode.postMessage({ 
-                type: 'addTask', 
-                value: val,
-                dueDate: dateInput.value || null
-            });
-            input.value = '';
-            input.style.height = 'auto';
-            dateInput.value = '';
-            dateWrapper.classList.remove('has-date');
-            dateWrapper.setAttribute('data-tooltip', 'Set Due Date');
+        submitTask();
+    }
+});
+
+dateInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        // User is on date input and presses Enter
+        if (!dateInput.value) {
+            // No date set, open the picker
+            openDatePicker();
+        } else {
+            // Date set, submit task
+            submitTask();
         }
     }
 });
@@ -156,7 +229,7 @@ window.addEventListener('message', event => {
         if (message.workspaceName) {
             workspaceNameEl.textContent = message.workspaceName;
         }
-        
+
         vscode.setState({ tasks: currentTasks, workspaceName: message.workspaceName, collapsedStates });
         renderTasks(currentTasks);
     }
@@ -167,8 +240,9 @@ function renderTasks(tasks) {
     activeList.innerHTML = '';
     completedList.innerHTML = '';
     backlogList.innerHTML = '';
+    blockedList.innerHTML = '';
 
-    let counts = { TODO: 0, Active: 0, Completed: 0, Backlog: 0 };
+    let counts = { TODO: 0, Active: 0, Completed: 0, Backlog: 0, Blocked: 0 };
 
     tasks.forEach((task, index) => {
         const category = task.category || 'Active';
@@ -249,6 +323,7 @@ function renderTasks(tasks) {
         else if (category === 'Active') activeList.appendChild(li);
         else if (category === 'Completed') completedList.appendChild(li);
         else if (category === 'Backlog') backlogList.appendChild(li);
+        else if (category === 'Blocked') blockedList.appendChild(li);
     });
 
     // Update Header Icons and Counts
@@ -315,27 +390,27 @@ function handleDrop(e) {
     if (dragSourceEl && dragSourceEl !== this) {
         const sourceId = dragSourceEl.dataset.id;
         const targetId = this.dataset.id;
-        
+
         // Determine target category from the item's classes
         const targetCategory = Array.from(this.classList)
             .find(c => c.startsWith('cat-'))
             ?.replace('cat-', '') || 'Active';
-        
+
         const sourceIndex = currentTasks.findIndex(t => t.id === sourceId);
         const targetIndex = currentTasks.findIndex(t => t.id === targetId);
-        
+
         if (sourceIndex !== -1 && targetIndex !== -1) {
             const newTasks = [...currentTasks];
             const [movedTask] = newTasks.splice(sourceIndex, 1);
-            
+
             // Update category
             movedTask.category = targetCategory;
             movedTask.completed = (targetCategory === 'Completed');
-            
+
             // We need to re-splice based on the new index after the first splice
             const finalTargetIndex = newTasks.findIndex(t => t.id === targetId);
             newTasks.splice(finalTargetIndex, 0, movedTask);
-            
+
             currentTasks = newTasks;
             vscode.setState({ tasks: currentTasks, workspaceName: workspaceNameEl.textContent, collapsedStates });
             renderTasks(newTasks);
@@ -350,17 +425,17 @@ function handleSectionDrop(e, targetCategory) {
     if (dragSourceEl) {
         const sourceId = dragSourceEl.dataset.id;
         const sourceIndex = currentTasks.findIndex(t => t.id === sourceId);
-        
+
         if (sourceIndex !== -1) {
             const newTasks = [...currentTasks];
             const [movedTask] = newTasks.splice(sourceIndex, 1);
-            
+
             movedTask.category = targetCategory;
             movedTask.completed = (targetCategory === 'Completed');
-            
+
             // Insert at the end of this category's block or just at the end of the array
             newTasks.push(movedTask);
-            
+
             currentTasks = newTasks;
             vscode.setState({ tasks: currentTasks, workspaceName: workspaceNameEl.textContent, collapsedStates });
             renderTasks(newTasks);
@@ -392,11 +467,11 @@ function clearCompleted() {
     vscode.postMessage({ type: 'clearCompleted' });
 }
 
- function clearActive() {
+function clearActive() {
     vscode.postMessage({ type: 'clearActive' });
 }
 
- function clearTodo() {
+function clearTodo() {
     vscode.postMessage({ type: 'clearCategory', category: 'TODO' });
 }
 
@@ -406,6 +481,10 @@ function activateAllTodo() {
 
 function clearBacklog() {
     vscode.postMessage({ type: 'clearCategory', category: 'Backlog' });
+}
+
+function clearBlocked() {
+    vscode.postMessage({ type: 'clearCategory', category: 'Blocked' });
 }
 
 function clearCategory(category) {
