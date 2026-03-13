@@ -435,8 +435,8 @@ class TodoViewProvider implements vscode.WebviewViewProvider {
 
                     /* Due Status Dot */
                     .due-dot {
-                        width: 8px;
-                        height: 8px;
+                        width: 10px;
+                        height: 10px;
                         border-radius: 50%;
                         flex-shrink: 0;
                         background: var(--vscode-descriptionForeground);
@@ -1066,7 +1066,7 @@ class TodoViewProvider implements vscode.WebviewViewProvider {
                             Object.keys(categoryIcons).forEach(cat => {
                                 if (cat !== category) {
                                     switcherHtml += \`
-                                        <button class="switcher-btn" onclick="event.stopPropagation(); changeCategory('\${task.id}', '\${cat}')">
+                                        <button class="switcher-btn" data-tooltip="Mark as \${cat}" onclick="event.stopPropagation(); changeCategory('\${task.id}', '\${cat}')">
                                             \${categoryIcons[cat]}
                                         </button>
                                     \`;
@@ -1078,7 +1078,7 @@ class TodoViewProvider implements vscode.WebviewViewProvider {
                                 <span class="task-title">\${escapeHtml(task.title)}</span>
                                 <div class="switcher">
                                     \${switcherHtml}
-                                    <button class="switcher-btn delete-task-btn" onclick="event.stopPropagation(); deleteTask('\${task.id}')">
+                                    <button class="switcher-btn delete-task-btn" data-tooltip="Delete Task" onclick="event.stopPropagation(); deleteTask('\${task.id}')">
                                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
                                     </button>
                                 </div>
