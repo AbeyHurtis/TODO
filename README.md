@@ -1,71 +1,64 @@
-# TODO README
+# TODO & MCP Task Tracker
 
-This is the README for your extension "TODO". After writing up a brief description, we recommend including the following sections.
+A powerful, AI-ready task management extension for Visual Studio Code. Keep your workflow focused without leaving the editor. Features an integrated Context Protocol (MCP) server, Git-aware heuristics, drag-and-drop categorization.
+
+![Extension Overview](images/overview.gif)
 
 ## Features
 
-Describe specific features of your extension including screenshots of your extension in action. Image paths are relative to this README file.
+### AI Agent & MCP Integration
+The extension natively runs a Model Context Protocol (MCP) server that exposes your tasks to LLM agents (like **Cursor**, **Antigravity**, or **VSCode**).
+* Agents can seamlessly read your current tasks, parse unstructured conversations or code commits, and bulk-add/update tasks autonomously.
+* **Cursor Integration:** Automatically registers natively with Antigravity / Cursor / VSCode MCP Extension API using SSE. No manual `mcp.json` editing is required—start editing and your AI is immediately aware of your TODO list.
 
-For example if there is an image subfolder under your extension project workspace:
 
-\!\[feature X\]\(images/feature-x.png\)
+### Categorized Workflow
+Organize your tasks into structured environments. Move tasks easily via Drag and Drop or keyboard shortcuts:
+* **TODO**: Upcoming work.
+* **Active**: What you are doing *right now*.
+* **Blocked**: Tasks awaiting external resolution.
+* **Completed**: Finished tasks.
+* **Backlog**: The parking lot for later ideas.
 
-> Tip: Many popular extensions utilize animations. This is an excellent way to show off your extension! We recommend short, focused animations that are easy to follow.
 
-## Requirements
+### Git Heuristic Tracking
+Stay in flow. The extension automatically monitors your Git activity. If it detects a commit message matching an active task title, it will automatically mark the task as **Completed**. If your Git commit or output mentions failures, it logs tasks as **Blocked**.
 
-If you have any requirements or dependencies, add a section describing those and how to install and configure them.
 
-## Extension Settings
-
-Include if your extension adds any VS Code settings through the `contributes.configuration` extension point.
-
-For example:
-
-This extension contributes the following settings:
-
-* `myExtension.enable`: Enable/disable this extension.
-* `myExtension.thing`: Set to `blah` to do something.
-
-## Known Issues
-
-Calling out known issues can help limit users opening duplicate issues against your extension.
-
-## Release Notes
-
-Users appreciate release notes as you update your extension.
-
-### 1.0.0
-
-Initial release of ...
-
-### 1.0.1
-
-Fixed issue #.
-
-### 1.1.0
-
-Added features X, Y, and Z.
+* **Urgency Badges**: Tasks color-code and push notification badges to the activity bar when overdue or due soon.
 
 ---
 
-## Following extension guidelines
+## Shortcuts & Interactions
 
-Ensure that you've read through the extensions guidelines and follow the best practices for creating your extension.
+Maximize your productivity with these built-in shortcuts inside the Webview Task Input:
 
-* [Extension Guidelines](https://code.visualstudio.com/api/references/extension-guidelines)
+| Command | Action |
+| ------------- |:-------------:|
+| `Enter` (Text Input) | Opens the Date Picker fields |
+| `Ctrl + Enter` (Windows/Linux) <br> `Cmd + Enter` (Mac) | **Quick Add Task** immediately (bypasses date) |
+| `Tab` / `Shift+Tab` / `Arrows` | Navigate smoothly between Day/Month/Year fields |
+| `Escape` | Cancel Date Picker, return focus to text input |
+| `Enter` (Empty Date Fields) | Add task without a due date |
+| `Enter` (Filled Date Fields) | Validate and Add task |
 
-## Working with Markdown
+### Action Buttons
+- **Clean View**: Toggles hiding empty categories to save screen real estate.
+- **Delete All / Clear Category**: Instantly purge completed or stale tasks.
+- **Activate All**: Bring all TODOs into the Active swimlane.
 
-You can author your README using Visual Studio Code. Here are some useful editor keyboard shortcuts:
+---
 
-* Split the editor (`Cmd+\` on macOS or `Ctrl+\` on Windows and Linux).
-* Toggle preview (`Shift+Cmd+V` on macOS or `Shift+Ctrl+V` on Windows and Linux).
-* Press `Ctrl+Space` (Windows, Linux, macOS) to see a list of Markdown snippets.
+## Commands
 
-## For more information
+This extension provides the following commands via the VS Code Command Palette (`Cmd+Shift+P`):
 
-* [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
-* [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
+* `TODO: Add Task` (`todo.addTask`): Quick input box to add a task globally.
+* `TODO: Clear Completed` (`todo.clearCompleted`): Deletes all finalized tasks.
+* `TODO: Clear Active` (`todo.clearActive`): Deletes all active tasks.
 
-**Enjoy!**
+## Known Issues
+-  Initial Release
+
+## Release Notes
+See [CHANGELOG.md](CHANGELOG.md) for detailed release history.
