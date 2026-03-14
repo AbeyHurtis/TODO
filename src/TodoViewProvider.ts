@@ -30,7 +30,7 @@ export class TodoViewProvider implements vscode.WebviewViewProvider {
 					this._updateWebview();
 					break;
 				case 'addTask':
-					this.addTask(data.value, data.dueDate);
+					this.addTask(data.value, data.dueDate, data.category || 'TODO', data.id);
 					break;
 				case 'toggleTask':
 					this.toggleTask(data.id);
@@ -159,16 +159,17 @@ export class TodoViewProvider implements vscode.WebviewViewProvider {
 		this._updateWebview(tasks);
 	}
 
-	public async addTask(title: string, dueDate: string | null = null, category: string = 'TODO') {
+	public async addTask(title: string, dueDate: string | null = null, category: string = 'TODO', id?: string) {
 		const tasks = this._state.get<any[]>('tasks', []);
 		tasks.push({
-			id: Date.now().toString(),
+			id: id || Date.now().toString(),
 			title,
 			category,
 			dueDate
 		});
-		await this._state.update('tasks', tasks);
-		this._updateWebview(tasks);
+		const sortedTasks = this._sortTasks(tasks);
+		await this._state.update('tasks', sortedTasks);
+		this._updateWebview(sortedTasks);
 	}
 
 	private async updateTitle(id: string, title: string) {
@@ -225,6 +226,19 @@ export class TodoViewProvider implements vscode.WebviewViewProvider {
 		this._updateWebview(newTasks);
 	}
 
+	private _sortTasks(tasks: any[]): any[] {
+		// Use a stable sort to maintain relative order for same/no dates
+		return tasks.sort((a, b) => {
+			const dateA = a.dueDate ? new Date(a.dueDate).getTime() : Infinity;
+			const dateB = b.dueDate ? new Date(b.dueDate).getTime() : Infinity;
+			
+			if (dateA !== dateB) {
+				return dateA - dateB;
+			}
+			return 0; // Maintain relative order if dates are same
+		});
+	}
+
 	private _updateWebview(tasks?: any[]) {
 		if (this._view) {
 			if (!tasks) {
@@ -243,8 +257,6 @@ export class TodoViewProvider implements vscode.WebviewViewProvider {
 			if (migrated) {
 				this._state.update('tasks', tasks);
 			}
-
-			// Calculate Urgency Counts
 			let overdueCount = 0;
 			let soonCount = 0;
 			const now = new Date();
@@ -309,8 +321,11 @@ export class TodoViewProvider implements vscode.WebviewViewProvider {
                             <span id="workspaceName">Loading Workspace...</span>
                         </div>
                         <div class="action-buttons">
-                            <button class="icon-btn" onclick="clearAll()" data-tooltip="Delete All Tasks">
-                                ${ICONS.SHREDDER}
+						<button class="clear-btn" onclick="clearAll()" data-tooltip="Delete All Tasks">
+							${ICONS.DELETE_CATEGORY}
+						</button>
+                            <button class="icon-btn" onclick="toggleCleanView()" data-tooltip="Clean View (Hide Empty)">
+                                ${ICONS.CLEAN_VIEW}
                             </button>
                         </div>
                     </div>
@@ -340,7 +355,7 @@ export class TodoViewProvider implements vscode.WebviewViewProvider {
                     ${this._getSectionHtml('backlog', 'Backlog', ICONS.BACKLOG, `
                         <button class="clear-btn" onclick="clearBacklog()" data-tooltip="Delete Backlog">${ICONS.DELETE_CATEGORY}</button>
                     `)}
-                    ${this._getSectionHtml('blocked', 'Blocked / LLM Failed', ICONS.BLOCKED, `
+                    ${this._getSectionHtml('blocked', 'Blocked', ICONS.BLOCKED, `
                         <button class="clear-btn" onclick="clearBlocked()" data-tooltip="Delete Blocked">${ICONS.DELETE_CATEGORY}</button>
                     `)}
                 </div>

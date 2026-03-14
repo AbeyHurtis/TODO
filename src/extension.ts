@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
-import * as fs from 'fs';
-import * as path from 'path';
-import * as os from 'os';
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
+import { dirname, join } from 'path';
+import { homedir } from 'os';
 import { TodoViewProvider } from './TodoViewProvider';
 import { GitManager } from './gitManager';
 import { registerChatParticipant } from './chatParticipant';
@@ -19,7 +19,7 @@ export function activate(context: vscode.ExtensionContext) {
 	const gitManager = new GitManager(provider);
 	const mcpServer = new TodoMcpServer(provider);
 	let serverUri: vscode.Uri | undefined;
-	
+
 	const definitionsEmitter = new vscode.EventEmitter<void>();
 	const installationsEmitter = new vscode.EventEmitter<void>();
 
@@ -27,45 +27,45 @@ export function activate(context: vscode.ExtensionContext) {
 	mcpServer.start().then(async (uri: vscode.Uri) => {
 		serverUri = uri;
 		console.log(`[TODO MCP] Server started and URI stored: ${uri.toString()}`);
-		
+
 		definitionsEmitter.fire();
 		installationsEmitter.fire();
-		
+
 		// Update MCP configs so external agents (like Antigravity or Claude) can see it
 		const updateConfig = (configPath: string) => {
 			try {
 				let config: any = { mcpServers: {} };
-				if (fs.existsSync(configPath)) {
-					const content = fs.readFileSync(configPath, 'utf8');
+				if (existsSync(configPath)) {
+					const content = readFileSync(configPath, 'utf8');
 					if (content.trim()) {
 						config = JSON.parse(content);
 					}
 				}
 				if (!config.mcpServers) config.mcpServers = {};
-				
+
 				config.mcpServers["todo-extension"] = {
 					"url": uri.toString(),
 					"serverURL": uri.toString()
 				};
-				
+
 				// Ensure directory exists
-				const dir = path.dirname(configPath);
-				if (!fs.existsSync(dir)) {
-					fs.mkdirSync(dir, { recursive: true });
+				const dir = dirname(configPath);
+				if (!existsSync(dir)) {
+					mkdirSync(dir, { recursive: true });
 				}
-				
-				fs.writeFileSync(configPath, JSON.stringify(config, null, 2));
+
+				writeFileSync(configPath, JSON.stringify(config, null, 2));
 				console.log(`[TODO MCP] Updated config at: ${configPath}`);
 			} catch (e) {
 				console.error(`[TODO MCP] Failed to update config at ${configPath}:`, e);
 			}
 		};
 
-		const home = os.homedir();
-		updateConfig(path.join(home, '.gemini', 'antigravity', 'mcp_config.json'));
-		updateConfig(path.join(home, 'Library', 'Application Support', 'Claude', 'mcp_config.json'));
-		updateConfig(path.join(home, 'Library', 'Application Support', 'Code', 'User', 'mcp.json'));
-		updateConfig(path.join(home, 'Library', 'Application Support', 'Code', 'User', 'globalStorage', 'mcp.json'));
+		const home = homedir();
+		updateConfig(join(home, '.gemini', 'antigravity', 'mcp_config.json'));
+		updateConfig(join(home, 'Library', 'Application Support', 'Claude', 'mcp_config.json'));
+		updateConfig(join(home, 'Library', 'Application Support', 'Code', 'User', 'mcp.json'));
+		updateConfig(join(home, 'Library', 'Application Support', 'Code', 'User', 'globalStorage', 'mcp.json'));
 
 		vscode.window.showInformationMessage(`TODO MCP Server is active on ${uri.authority}`);
 	});

@@ -13,6 +13,11 @@ const backlogSection = document.getElementById('backlogSection');
 const blockedList = document.getElementById('blockedTasks');
 const blockedSection = document.getElementById('blockedSection');
 const workspaceNameEl = document.getElementById('workspaceName');
+const previousState = vscode.getState();
+let currentTasks = previousState ? previousState.tasks : [];
+let collapsedStates = previousState ? (previousState.collapsedStates || {}) : {};
+let lastAddedTaskId = null;
+let isCleanView = previousState ? (previousState.isCleanView || false) : false;
 
 const categoryIcons = {
     TODO: ICONS.TODO,
@@ -93,10 +98,6 @@ document.addEventListener('mouseout', e => {
     }
 });
 
-const previousState = vscode.getState();
-let currentTasks = previousState ? previousState.tasks : [];
-let collapsedStates = previousState ? (previousState.collapsedStates || {}) : {};
-
 // Restore folding states
 Object.keys(collapsedStates).forEach(id => {
     if (collapsedStates[id]) {
@@ -109,7 +110,19 @@ function toggleSection(id) {
     const el = document.getElementById(id);
     const isCollapsed = el.classList.toggle('collapsed');
     collapsedStates[id] = isCollapsed;
-    vscode.setState({ tasks: currentTasks, workspaceName: workspaceNameEl.textContent, collapsedStates });
+    vscode.setState({ tasks: currentTasks, workspaceName: workspaceNameEl.textContent, collapsedStates, isCleanView });
+}
+
+function toggleCleanView() {
+    isCleanView = !isCleanView;
+    document.body.classList.toggle('clean-view', isCleanView);
+    vscode.setState({ tasks: currentTasks, workspaceName: workspaceNameEl.textContent, collapsedStates, isCleanView });
+    renderTasks(currentTasks);
+}
+
+// Set initial state
+if (isCleanView) {
+    document.body.classList.add('clean-view');
 }
 if (previousState && previousState.workspaceName) {
     workspaceNameEl.textContent = previousState.workspaceName;
@@ -148,7 +161,7 @@ function openDatePicker() {
     try {
         // First ensure focus
         dateInput.focus();
-        
+
         // Try showPicker first if available (modern way)
         if (typeof dateInput.showPicker === 'function') {
             try {
@@ -159,7 +172,7 @@ function openDatePicker() {
                 console.warn("showPicker blocked by security policy, falling back to click()");
             }
         }
-        
+
         // Fallback to click()
         dateInput.click();
         console.log("dateInput.click() executed");
@@ -179,10 +192,14 @@ dateWrapper.addEventListener('click', (e) => {
 function submitTask() {
     const val = input.value.trim();
     if (val) {
+        const newId = Date.now().toString();
+        lastAddedTaskId = newId;
+
         vscode.postMessage({
             type: 'addTask',
             value: val,
-            dueDate: dateInput.value || null
+            dueDate: dateInput.value || null,
+            id: newId
         });
         input.value = '';
         input.style.height = 'auto';
@@ -190,6 +207,13 @@ function submitTask() {
         dateWrapper.classList.remove('has-date');
         dateWrapper.setAttribute('data-tooltip', 'Set Due Date');
         input.focus();
+
+        // Clear the flash tracking after 3 seconds
+        setTimeout(() => {
+            if (lastAddedTaskId === newId) {
+                lastAddedTaskId = null;
+            }
+        }, 3000);
     }
 }
 
@@ -230,7 +254,7 @@ window.addEventListener('message', event => {
             workspaceNameEl.textContent = message.workspaceName;
         }
 
-        vscode.setState({ tasks: currentTasks, workspaceName: message.workspaceName, collapsedStates });
+        vscode.setState({ tasks: currentTasks, workspaceName: message.workspaceName, collapsedStates, isCleanView });
         renderTasks(currentTasks);
     }
 });
@@ -249,14 +273,18 @@ function renderTasks(tasks) {
         counts[category]++;
 
         const li = document.createElement('div');
-        li.className = `task-item cat-${category}` + (category === 'Completed' ? ' completed' : '');
+        const isNew = String(task.id) === String(lastAddedTaskId);
+        li.className = `task-item cat-${category}` +
+            (category === 'Completed' ? ' completed' : '') +
+            (isNew ? ' flash-new' : '');
         li.draggable = true;
         li.dataset.id = task.id;
         li.dataset.index = index;
 
         const dueStatus = getDueStatus(task.dueDate);
         const dueDateStr = formatDueDate(task.dueDate, dueStatus);
-        li.setAttribute('data-tooltip', dueDateStr);
+        const combinedTooltip = `Date : ${dueDateStr}\nTask : ${task.title}`;
+        li.setAttribute('data-tooltip', combinedTooltip);
 
         let switcherHtml = '';
         Object.keys(categoryIcons).forEach(cat => {
@@ -315,7 +343,24 @@ function renderTasks(tasks) {
         });
 
         li.addEventListener('dragstart', handleDragStart);
-        li.addEventListener('dragover', handleDragOver);
+        li.addEventListener('dragover', (e) => {
+            handleDragOver(e);
+            
+            // Visual feedback for insertion point
+            const rect = li.getBoundingClientRect();
+            const midpoint = rect.top + rect.height / 2;
+            if (e.clientY < midpoint) {
+                li.classList.add('drop-target-above');
+                li.classList.remove('drop-target-below');
+            } else {
+                li.classList.add('drop-target-below');
+                li.classList.remove('drop-target-above');
+            }
+        });
+        li.addEventListener('dragleave', () => {
+            li.classList.remove('drop-target-above');
+            li.classList.remove('drop-target-below');
+        });
         li.addEventListener('drop', handleDrop);
         li.addEventListener('dragend', handleDragEnd);
 
@@ -324,14 +369,32 @@ function renderTasks(tasks) {
         else if (category === 'Completed') completedList.appendChild(li);
         else if (category === 'Backlog') backlogList.appendChild(li);
         else if (category === 'Blocked') blockedList.appendChild(li);
+
+        // Scroll new items into view
+        if (task.id === lastAddedTaskId) {
+            setTimeout(() => {
+                li.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }, 100);
+        }
     });
 
     // Update Header Icons and Counts
     Object.keys(counts).forEach(cat => {
+        const sectionId = cat.toLowerCase() + 'Section';
         const iconEl = document.getElementById(cat.toLowerCase() + 'HeaderIcon');
         const countEl = document.getElementById(cat.toLowerCase() + 'HeaderCount');
+        const sectionEl = document.getElementById(sectionId);
+
         if (iconEl) iconEl.innerHTML = categoryIcons[cat];
         if (countEl) countEl.textContent = counts[cat];
+
+        if (sectionEl) {
+            if (isCleanView && counts[cat] === 0) {
+                sectionEl.style.display = 'none';
+            } else {
+                sectionEl.style.display = 'flex';
+            }
+        }
     });
 }
 
@@ -352,9 +415,24 @@ function getDueStatus(dueDate) {
 function formatDueDate(dueDate, status) {
     if (!dueDate) return 'No due date';
     const due = new Date(dueDate);
-    if (status === 'overdue') return 'Overdue';
-    if (status === 'today') return 'Due Today';
-    if (status === 'soon') return 'Due Soon';
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    due.setHours(0, 0, 0, 0);
+    
+    const diffTime = due.getTime() - today.getTime();
+    const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+
+    if (diffDays === 0) return 'Due Today';
+    
+    if (diffDays > 0 && diffDays <= 15) {
+        return `${diffDays} days left`;
+    }
+    
+    if (diffDays < 0 && diffDays >= -15) {
+        const ago = Math.abs(diffDays);
+        return `Due ${ago} day${ago > 1 ? 's' : ''} ago`;
+    }
+
     return 'Due ' + due.toLocaleDateString();
 }
 
@@ -387,9 +465,16 @@ function handleDrop(e) {
     e.stopPropagation();
     e.preventDefault();
 
+    this.classList.remove('drop-target-above');
+    this.classList.remove('drop-target-below');
+
     if (dragSourceEl && dragSourceEl !== this) {
         const sourceId = dragSourceEl.dataset.id;
         const targetId = this.dataset.id;
+
+        const rect = this.getBoundingClientRect();
+        const midpoint = rect.top + rect.height / 2;
+        const insertAfter = e.clientY >= midpoint;
 
         // Determine target category from the item's classes
         const targetCategory = Array.from(this.classList)
@@ -397,9 +482,8 @@ function handleDrop(e) {
             ?.replace('cat-', '') || 'Active';
 
         const sourceIndex = currentTasks.findIndex(t => t.id === sourceId);
-        const targetIndex = currentTasks.findIndex(t => t.id === targetId);
-
-        if (sourceIndex !== -1 && targetIndex !== -1) {
+        
+        if (sourceIndex !== -1) {
             const newTasks = [...currentTasks];
             const [movedTask] = newTasks.splice(sourceIndex, 1);
 
@@ -407,12 +491,16 @@ function handleDrop(e) {
             movedTask.category = targetCategory;
             movedTask.completed = (targetCategory === 'Completed');
 
-            // We need to re-splice based on the new index after the first splice
-            const finalTargetIndex = newTasks.findIndex(t => t.id === targetId);
+            // Find new target index after removal
+            let finalTargetIndex = newTasks.findIndex(t => t.id === targetId);
+            if (insertAfter) {
+                finalTargetIndex++;
+            }
+            
             newTasks.splice(finalTargetIndex, 0, movedTask);
 
             currentTasks = newTasks;
-            vscode.setState({ tasks: currentTasks, workspaceName: workspaceNameEl.textContent, collapsedStates });
+            vscode.setState({ tasks: currentTasks, workspaceName: workspaceNameEl.textContent, collapsedStates, isCleanView });
             renderTasks(newTasks);
             vscode.postMessage({ type: 'reorderTasks', tasks: newTasks });
         }
@@ -437,7 +525,7 @@ function handleSectionDrop(e, targetCategory) {
             newTasks.push(movedTask);
 
             currentTasks = newTasks;
-            vscode.setState({ tasks: currentTasks, workspaceName: workspaceNameEl.textContent, collapsedStates });
+            vscode.setState({ tasks: currentTasks, workspaceName: workspaceNameEl.textContent, collapsedStates, isCleanView });
             renderTasks(newTasks);
             vscode.postMessage({ type: 'reorderTasks', tasks: newTasks });
         }

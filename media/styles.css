@@ -38,8 +38,10 @@ html {
     flex-direction: column;
     height: 100%;
     box-sizing: border-box;
-    margin-right: 4px;
+    margin-right: 2px;
     pointer-events: auto;
+    overflow-y: visible;
+    scrollbar-gutter: stable;
 }
 
 .input-area {
@@ -173,8 +175,43 @@ html {
 #backlogTasks,
 #blockedTasks {
     flex: 1;
-    overflow-y: auto;
+    overflow-y: scroll;
+    scrollbar-gutter: stable;
+    min-height: 50px;
+    max-height: 400px;
     padding: 0 10px;
+}
+
+/* Custom Scrollbar Visibility - Forced and Prominent */
+::-webkit-scrollbar {
+    width: 10px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--vscode-scrollbarSlider-background, rgba(0, 0, 0, 0.8));
+    border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--vscode-scrollbarSlider-activeBackground, #666);
+    border-radius: 10px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--vscode-scrollbarSlider-hoverBackground, #888);
+    border: 2px solid transparent;
+    background-clip: content-box;
+}
+
+/* Drag and Drop Visual Feedback */
+.task-item.drop-target-above {
+    border-top: 2px solid var(--vscode-focusBorder) !important;
+}
+
+.task-item.drop-target-below {
+    border-bottom: 2px solid var(--vscode-focusBorder) !important;
 }
 
 #completedSection,
@@ -225,7 +262,7 @@ html {
 
 /* Category Theming */
 .task-item.cat-Active {
-    border-left: 2px solid var(--vscode-charts-blue);
+    border-left: 2px solid var(--vscode-charts-orange);
 }
 
 .task-item.cat-Completed {
@@ -306,6 +343,38 @@ html {
 
     100% {
         opacity: 1;
+    }
+}
+
+/* Flash Animation for newly added tasks */
+.task-item.flash-new {
+    animation: flash-border 2s ease-out;
+}
+
+.task-item.flash-new .due-dot {
+    animation: flash-dot 2s ease-out;
+}
+
+@keyframes flash-border {
+    0% {
+        border-left: 10px solid var(--vscode-charts-blue);
+        background: rgba(0, 122, 204, 0.2);
+    }
+
+    100% {
+        border-left-width: 2px;
+    }
+}
+
+@keyframes flash-dot {
+    0% {
+        background-color: var(--vscode-charts-blue) !important;
+        transform: scale(2.5);
+        box-shadow: 0 0 15px var(--vscode-charts-blue);
+    }
+
+    100% {
+        transform: scale(1);
     }
 }
 
@@ -594,7 +663,9 @@ input[type="checkbox"] {
     z-index: 1000;
     pointer-events: none;
     display: none;
-    white-space: nowrap;
+    white-space: pre-wrap;
+    max-width: 250px;
+    word-break: break-all;
     box-shadow: 0 4px 12px var(--vscode-widget-shadow, rgba(0, 0, 0, 0.4));
 }
 
