@@ -86,7 +86,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 	// 3. Register Definition Provider
 	context.subscriptions.push(
-		vscode.lm.registerMcpServerDefinitionProvider('local-dev.TODO', {
+		vscode.lm.registerMcpServerDefinitionProvider('Hurtis.TODO', {
 			onDidChangeMcpServerDefinitions: definitionsEmitter.event,
 			provideMcpServerDefinitions: () => {
 				console.log("[TODO MCP] provideMcpServerDefinitions called. URI is:", serverUri?.toString());

@@ -3,7 +3,7 @@
   "displayName": "TODO",
   "description": "TODO",
   "version": "0.0.1",
-  "publisher": "local-dev",
+  "publisher": "Hurtis",
   "repository": {
     "type": "git",
     "url": "https://github.com/AbeyHurtis/TODO.git"
@@ -68,7 +68,7 @@
     },
     "chatParticipants": [
       {
-        "id": "local-dev.TODO.todotracker",
+        "id": "Hurtis.TODO.todotracker",
         "name": "todotracker",
         "description": "Add, modify, or query tasks.",
         "isDefault": false,
@@ -82,7 +82,7 @@
     ],
     "mcpServerDefinitionProviders": [
       {
-        "id": "local-dev.TODO",
+        "id": "Hurtis.TODO",
         "label": "TODO MCP Server Provider"
       }
     ]
