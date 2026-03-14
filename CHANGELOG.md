@@ -13,6 +13,7 @@ All notable changes to the "TODO" extension will be documented in this file.
   - Advanced keyboard-friendly Date Picker with tab navigation and Quick Add (`Cmd/Ctrl+Enter`).
   - Flash animations for newly inserted tasks.
   - "Clean View" button to toggle empty categories to save space.
+- **Branding**: Set official Marketplace icon by converting sidebar SVG to 128x128 PNG (`resources/icon.png`).
 - **Security Enhancements**: Patched internal string rendering (`innerHTML` vs `textContent`) to strictly prevent XSS payloads from interacting agents.
 
 ### Fixed

@@ -3,6 +3,7 @@
   "displayName": "TODO",
   "description": "TODO",
   "version": "0.0.1",
+  "icon": "resources/icon.png",
   "publisher": "Hurtis",
   "repository": {
     "type": "git",
