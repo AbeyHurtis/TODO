@@ -67,7 +67,7 @@ document.body.appendChild(tooltipEl);
 document.addEventListener('mouseover', e => {
     const target = e.target.closest('[data-tooltip]');
     if (target) {
-        tooltipEl.innerHTML = target.getAttribute('data-tooltip');
+        tooltipEl.textContent = target.getAttribute('data-tooltip');
         tooltipEl.style.display = 'block';
 
         const rect = target.getBoundingClientRect();

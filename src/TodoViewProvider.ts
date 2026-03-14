@@ -160,25 +160,56 @@ export class TodoViewProvider implements vscode.WebviewViewProvider {
 	}
 
 	public async addTask(title: string, dueDate: string | null = null, category: string = 'TODO', id?: string) {
+		await this.addTasks([{ title, dueDate, category, id }]);
+	}
+
+	public async addTasks(newTasksData: { title: string, dueDate?: string | null, category?: string, id?: string }[]) {
 		const tasks = this._state.get<any[]>('tasks', []);
-		tasks.push({
-			id: id || Date.now().toString(),
-			title,
-			category,
-			dueDate
-		});
+		
+		for (const data of newTasksData) {
+			const safeId = data.id 
+				? data.id.replace(/[^a-zA-Z0-9_-]/g, '') 
+				: Date.now().toString() + Math.random().toString(36).substring(7);
+
+			tasks.push({
+				id: safeId || Date.now().toString(), // Fallback if safeId ends up empty after sanitization
+				title: data.title,
+				category: data.category || 'TODO',
+				dueDate: data.dueDate || null,
+				completed: (data.category === 'Completed')
+			});
+		}
+
 		const sortedTasks = this._sortTasks(tasks);
 		await this._state.update('tasks', sortedTasks);
 		this._updateWebview(sortedTasks);
 	}
 
 	private async updateTitle(id: string, title: string) {
+		await this.updateTasks([{ id, title }]);
+	}
+
+	public async updateTasks(updates: { id: string, title?: string, category?: string, dueDate?: string | null }[]) {
 		const tasks = this._state.get<any[]>('tasks', []);
-		const task = tasks.find(t => t.id === id);
-		if (task) {
-			task.title = title;
-			await this._state.update('tasks', tasks);
-			this._updateWebview(tasks);
+		let changed = false;
+
+		for (const update of updates) {
+			const task = tasks.find(t => t.id === update.id);
+			if (task) {
+				if (update.title !== undefined) task.title = update.title;
+				if (update.category !== undefined) {
+					task.category = update.category;
+					task.completed = (update.category === 'Completed');
+				}
+				if (update.dueDate !== undefined) task.dueDate = update.dueDate;
+				changed = true;
+			}
+		}
+
+		if (changed) {
+			const sortedTasks = this._sortTasks(tasks);
+			await this._state.update('tasks', sortedTasks);
+			this._updateWebview(sortedTasks);
 		}
 	}
 
@@ -187,14 +218,7 @@ export class TodoViewProvider implements vscode.WebviewViewProvider {
 	}
 
 	public async changeCategory(id: string, category: string) {
-		const tasks = this._state.get<any[]>('tasks', []);
-		const task = tasks.find(t => t.id === id);
-		if (task) {
-			task.category = category;
-			task.completed = (category === 'Completed');
-			await this._state.update('tasks', tasks);
-			this._updateWebview(tasks);
-		}
+		await this.updateTasks([{ id, category }]);
 	}
 
 	private async toggleTask(id: string) {
@@ -215,10 +239,18 @@ export class TodoViewProvider implements vscode.WebviewViewProvider {
 	}
 
 	private async deleteTask(id: string) {
+		await this.deleteTasks([id]);
+	}
+
+	public async deleteTasks(ids: string[]) {
 		let tasks = this._state.get<any[]>('tasks', []);
-		tasks = tasks.filter(t => t.id !== id);
-		await this._state.update('tasks', tasks);
-		this._updateWebview(tasks);
+		const originalLength = tasks.length;
+		tasks = tasks.filter(t => !ids.includes(t.id));
+		
+		if (tasks.length !== originalLength) {
+			await this._state.update('tasks', tasks);
+			this._updateWebview(tasks);
+		}
 	}
 
 	private async reorderTasks(newTasks: any[]) {
