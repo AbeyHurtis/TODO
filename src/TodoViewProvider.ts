@@ -331,13 +331,27 @@ export class TodoViewProvider implements vscode.WebviewViewProvider {
                     </div>
                     <div class="input-area">
                         <div class="input-container">
-                            <textarea id="taskInput" placeholder="Add a task, press Enter..." rows="1"></textarea>
+                            <textarea id="taskInput" placeholder="Task... (⏎ Date, ⌘⏎ Add)" rows="1"></textarea>
                             
                             <label class="date-wrapper" id="dateWrapper" data-tooltip="Set Due Date">
 								<span class="calander-icon"></span>
 								<input class="date-input" type="date" id="dueDateInput" />
                             </label>
+                            <button class="submit-tick-btn gui-submit-btn" id="guiSubmitBtn" data-tooltip="Submit Task">
+                                ${ICONS.SUBMIT}
+                            </button>
 
+                            <div class="dmy-container" id="dmyContainer" style="display: none;">
+                                <input type="text" id="dayInput" class="dmy-input" placeholder="DD" maxlength="2" inputmode="numeric">
+                                <span class="dmy-separator">/</span>
+                                <input type="text" id="monthInput" class="dmy-input" placeholder="MM" maxlength="2" inputmode="numeric">
+                                <span class="dmy-separator">/</span>
+                                <input type="text" id="yearInput" class="dmy-input" placeholder="YYYY" maxlength="4" inputmode="numeric">
+                                <button class="submit-tick-btn" id="submitTickBtn" data-tooltip="Add Task With Date">
+                                    ${ICONS.SUBMIT}
+                                </button>
+                                <div id="validationError" class="validation-error"></div>
+                            </div>
                         </div>
                     </div>
                     ${this._getSectionHtml('todo', 'TODO', ICONS.TODO, `

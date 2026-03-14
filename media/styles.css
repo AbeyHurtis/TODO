@@ -52,6 +52,15 @@ html {
 .input-container {
     display: flex;
     gap: 5px;
+    position: relative;
+    align-items: flex-start;
+}
+
+#taskInput.fade-out,
+#dateWrapper.fade-out {
+    opacity: 0;
+    transform: translateY(5px);
+    pointer-events: none;
 }
 
 #taskInput {
@@ -137,6 +146,144 @@ html {
     cursor: pointer;
     box-sizing: border-box;
     z-index: 2;
+}
+
+
+.dmy-container {
+    display: none;
+    align-items: center;
+    gap: 4px;
+    background: var(--vscode-input-background);
+    border: 1px solid var(--vscode-input-border);
+    border-radius: 4px;
+    padding: 4px 8px;
+    flex: 1;
+    position: relative;
+    box-sizing: border-box;
+}
+
+.dmy-container.active {
+    display: flex;
+    animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-5px) scale(0.98);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.dmy-input {
+    background: transparent;
+    color: var(--vscode-input-foreground);
+    border: none;
+    outline: none;
+    width: 25px;
+    font-family: inherit;
+    font-size: 1em;
+    padding: 4px 2px;
+    text-align: center;
+    -moz-appearance: textfield;
+    appearance: textfield;
+}
+
+.dmy-input::-webkit-outer-spin-button,
+.dmy-input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+#yearInput {
+    width: 45px;
+}
+
+.dmy-separator {
+    opacity: 0.5;
+    user-select: none;
+}
+
+.submit-tick-btn {
+    background: transparent;
+    border: none;
+    color: var(--vscode-charts-green);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px;
+    border-radius: 4px;
+    transition: all 0.2s;
+    margin-left: auto;
+}
+
+.submit-tick-btn:hover {
+    background: rgba(127, 127, 127, 0.1);
+    transform: scale(1.1);
+}
+
+.submit-tick-btn svg {
+    width: 20px;
+    height: 20px;
+}
+
+.gui-submit-btn {
+    border: 1px solid var(--vscode-input-border);
+    background: var(--vscode-input-background);
+    border-radius: 4px;
+    height: 100%;
+    margin-left: -1px;
+    padding: 0 8px;
+    align-self: stretch;
+    display: none;
+    animation: slideIn 0.3s ease-out;
+}
+
+.gui-submit-btn.show {
+    display: flex;
+}
+
+.gui-submit-btn:hover {
+    background: var(--vscode-toolbar-hoverBackground);
+    border-color: var(--vscode-focusBorder);
+}
+
+.validation-error {
+    position: absolute;
+    right: 40px; /* Leave space for the tick button */
+    top: 50%;
+    transform: translateY(-50%) translateY(-35px); /* Pop above the field */
+    background: var(--vscode-errorForeground);
+    color: var(--vscode-button-foreground);
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: bold;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    z-index: 1001;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+
+.validation-error.show {
+    opacity: 1;
+    transform: translateY(-50%) translateY(-40px);
+}
+
+.validation-error::after {
+    content: '';
+    position: absolute;
+    bottom: -6px;
+    right: 20px;
+    border-width: 6px 6px 0 6px;
+    border-style: solid;
+    border-color: var(--vscode-errorForeground) transparent transparent transparent;
 }
 
 .date-input::-webkit-calendar-picker-indicator {

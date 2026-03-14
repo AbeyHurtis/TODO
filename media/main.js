@@ -13,6 +13,13 @@ const backlogSection = document.getElementById('backlogSection');
 const blockedList = document.getElementById('blockedTasks');
 const blockedSection = document.getElementById('blockedSection');
 const workspaceNameEl = document.getElementById('workspaceName');
+const dmyContainer = document.getElementById('dmyContainer');
+const dayInput = document.getElementById('dayInput');
+const monthInput = document.getElementById('monthInput');
+const yearInput = document.getElementById('yearInput');
+const submitTickBtn = document.getElementById('submitTickBtn');
+const guiSubmitBtn = document.getElementById('guiSubmitBtn');
+const validationError = document.getElementById('validationError');
 const previousState = vscode.getState();
 let currentTasks = previousState ? previousState.tasks : [];
 let collapsedStates = previousState ? (previousState.collapsedStates || {}) : {};
@@ -146,15 +153,20 @@ input.addEventListener('input', () => {
     input.style.height = input.scrollHeight + 'px';
 });
 
-dateInput.addEventListener('change', () => {
+const updateGuiSubmitVisibility = () => {
     if (dateInput.value) {
         dateWrapper.classList.add('has-date');
         dateWrapper.setAttribute('data-tooltip', 'Due: ' + dateInput.value);
+        guiSubmitBtn.classList.add('show');
     } else {
         dateWrapper.classList.remove('has-date');
         dateWrapper.setAttribute('data-tooltip', 'Set Due Date');
+        guiSubmitBtn.classList.remove('show');
     }
-});
+};
+
+dateInput.addEventListener('change', updateGuiSubmitVisibility);
+dateInput.addEventListener('input', updateGuiSubmitVisibility);
 
 function openDatePicker() {
     console.log("Requesting Date Picker...");
@@ -206,6 +218,7 @@ function submitTask() {
         dateInput.value = '';
         dateWrapper.classList.remove('has-date');
         dateWrapper.setAttribute('data-tooltip', 'Set Due Date');
+        guiSubmitBtn.classList.remove('show');
         input.focus();
 
         // Clear the flash tracking after 3 seconds
@@ -218,21 +231,197 @@ function submitTask() {
 }
 
 input.addEventListener('keydown', (e) => {
-    if (e.key === 'Tab') {
-        // Case: User wants to set a date.
-        // We stop the focus from leaving the webview and instead 
-        // focus our own date input.
-        e.preventDefault();
-        dateInput.focus();
-        console.log("Tab pressed: Focus moved to dateInput");
-    }
-    if (e.key === 'Enter' && !e.shiftKey) {
+    const isModKey = e.metaKey || e.ctrlKey;
+    
+    if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey && !isModKey)) {
+        const val = input.value.trim();
+        if (val) {
+            e.preventDefault();
+            showDmyInput();
+        } else if (e.key === 'Tab') {
+            e.preventDefault();
+            dateInput.focus();
+        }
+    } else if (e.key === 'Enter' && isModKey) {
         e.preventDefault();
         submitTask();
     }
 });
 
+function showDmyInput() {
+    input.classList.add('fade-out');
+    dateWrapper.classList.add('fade-out');
+    
+    setTimeout(() => {
+        input.style.display = 'none';
+        dateWrapper.style.display = 'none';
+        dmyContainer.style.display = 'flex';
+        // Force reflow
+        dmyContainer.offsetHeight;
+        dmyContainer.classList.add('active');
+        
+        // Set default placeholders to today
+        const now = new Date();
+        dayInput.placeholder = String(now.getDate()).padStart(2, '0');
+        monthInput.placeholder = String(now.getMonth() + 1).padStart(2, '0');
+        yearInput.placeholder = String(now.getFullYear());
+        
+        // Clear previous values but keep focus
+        dayInput.value = '';
+        monthInput.value = '';
+        yearInput.value = '';
+        
+        dayInput.focus();
+    }, 300);
+}
+
+function hideDmyInput() {
+    dmyContainer.classList.remove('active');
+    setTimeout(() => {
+        dmyContainer.style.display = 'none';
+        input.style.display = 'block';
+        dateWrapper.style.display = 'flex';
+        
+        // Force reflow
+        input.offsetHeight;
+        input.classList.remove('fade-out');
+        dateWrapper.classList.remove('fade-out');
+        input.focus();
+    }, 300);
+}
+
+function validateAndSubmitDmy() {
+    const val = input.value.trim();
+    if (!val) return hideDmyInput();
+
+    const d = dayInput.value.trim();
+    const m = monthInput.value.trim();
+    const y = yearInput.value.trim();
+
+    // If all are empty, submit without date
+    if (!d && !m && !y) {
+        submitTask(); // This already handles resetting input and hiding date picker wrapper
+        hideDmyInput();
+        return;
+    }
+
+    // If some fields have value but others don't, it's invalid
+    if (!d || !m || !y) {
+        showValidationErrorMessage('Please fill Day, Month, and Year');
+        if (!d) dayInput.focus();
+        else if (!m) monthInput.focus();
+        else yearInput.focus();
+        return;
+    }
+
+    const day = parseInt(d);
+    const month = parseInt(m);
+    const year = parseInt(y);
+
+    const date = new Date(year, month - 1, day);
+    const isValid = date.getFullYear() === year && 
+                    date.getMonth() === month - 1 && 
+                    date.getDate() === day;
+
+    if (isValid) {
+        validationError.classList.remove('show');
+        const formattedDate = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        
+        const newId = Date.now().toString();
+        lastAddedTaskId = newId;
+
+        vscode.postMessage({
+            type: 'addTask',
+            value: val,
+            dueDate: formattedDate,
+            id: newId
+        });
+
+        // Reset
+        input.value = '';
+        input.style.height = 'auto';
+        dayInput.value = '';
+        monthInput.value = '';
+        yearInput.value = '';
+        
+        hideDmyInput();
+    } else {
+        showValidationErrorMessage('Invalid Date');
+        dayInput.focus();
+    }
+}
+
+function showValidationErrorMessage(msg) {
+    validationError.textContent = msg;
+    validationError.classList.add('show');
+    setTimeout(() => {
+        validationError.classList.remove('show');
+    }, 3000);
+}
+
+// DMY Input Navigation
+[dayInput, monthInput, yearInput].forEach((el, index, arr) => {
+    el.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            validateAndSubmitDmy();
+        }
+        if (e.key === 'Tab') {
+            e.preventDefault();
+            if (index < arr.length - 1) {
+                arr[index + 1].focus();
+            } else {
+                validateAndSubmitDmy();
+            }
+        }
+        if (e.key === 'Backspace') {
+            // Move back to previous field if cursor is at the beginning
+            if (index > 0 && el.selectionStart === 0 && el.selectionEnd === 0) {
+                e.preventDefault();
+                const prevField = arr[index - 1];
+                prevField.focus();
+                // Put cursor at the end of the previous field
+                prevField.setSelectionRange(prevField.value.length, prevField.value.length);
+            }
+        }
+        if (e.key === 'ArrowRight') {
+            if (index < arr.length - 1 && el.selectionStart === el.value.length) {
+                e.preventDefault();
+                const nextField = arr[index + 1];
+                nextField.focus();
+                nextField.setSelectionRange(0, 0);
+            }
+        }
+        if (e.key === 'ArrowLeft') {
+            if (index > 0 && el.selectionStart === 0) {
+                e.preventDefault();
+                const prevField = arr[index - 1];
+                prevField.focus();
+                prevField.setSelectionRange(prevField.value.length, prevField.value.length);
+            }
+        }
+        if (e.key === 'Escape') {
+            hideDmyInput();
+        }
+    });
+
+    // Numeric only filter and auto-advance
+    el.addEventListener('input', () => {
+        el.value = el.value.replace(/[^0-9]/g, '');
+        
+        if (el !== yearInput && el.value.length >= 2) {
+            arr[index + 1].focus();
+        }
+    });
+});
+
+submitTickBtn.addEventListener('click', validateAndSubmitDmy);
+
 dateInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Esc' || e.key === 'Escape') {
+        e.preventDefault();
+        input.focus();
+    }
     if (e.key === 'Enter') {
         e.preventDefault();
         // User is on date input and presses Enter
@@ -245,6 +434,8 @@ dateInput.addEventListener('keydown', (e) => {
         }
     }
 });
+
+guiSubmitBtn.addEventListener('click', submitTask);
 
 window.addEventListener('message', event => {
     const message = event.data;
