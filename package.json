@@ -3,13 +3,16 @@
   "displayName": "TODO",
   "description": "TODO",
   "version": "0.0.1",
+  "publisher": "local-dev",
   "engines": {
     "vscode": "^1.100.0"
   },
   "categories": [
     "Other"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "*"
+  ],
   "main": "./out/extension.js",
   "extensionDependencies": [
     "vscode.git"
@@ -45,6 +48,38 @@
       {
         "command": "todo.clearActive",
         "title": "Clear Active Tasks"
+      },
+      {
+        "command": "todo.addBlockedTaskFromSelection",
+        "title": "TODO: Add blocked task from selection"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "todo.addBlockedTaskFromSelection",
+          "group": "modification"
+        }
+      ]
+    },
+    "chatParticipants": [
+      {
+        "id": "local-dev.TODO.todotracker",
+        "name": "todotracker",
+        "description": "Add, modify, or query tasks.",
+        "isDefault": false,
+        "commands": [
+          {
+            "name": "add",
+            "description": "Add a new task"
+          }
+        ]
+      }
+    ],
+    "mcpServerDefinitionProviders": [
+      {
+        "id": "local-dev.TODO",
+        "label": "TODO MCP Server Provider"
       }
     ]
   },
@@ -57,6 +92,7 @@
     "test": "vscode-test"
   },
   "devDependencies": {
+    "@types/express": "^5.0.6",
     "@types/mocha": "^10.0.10",
     "@types/node": "22.x",
     "@types/vscode": "^1.100.0",
@@ -70,5 +106,9 @@
   "overrides": {
     "serialize-javascript": "7.0.4",
     "diff": "5.2.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.1",
+    "express": "^5.2.1"
   }
 }

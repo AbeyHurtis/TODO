@@ -159,12 +159,12 @@ export class TodoViewProvider implements vscode.WebviewViewProvider {
 		this._updateWebview(tasks);
 	}
 
-	private async addTask(title: string, dueDate: string | null = null) {
+	public async addTask(title: string, dueDate: string | null = null, category: string = 'TODO') {
 		const tasks = this._state.get<any[]>('tasks', []);
 		tasks.push({
 			id: Date.now().toString(),
 			title,
-			category: 'TODO',
+			category,
 			dueDate
 		});
 		await this._state.update('tasks', tasks);
