@@ -1,48 +1,80 @@
 import * as vscode from 'vscode';
 import * as http from 'http';
+import { ServerResponse } from 'http';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { TodoViewProvider } from './TodoViewProvider';
 import { randomUUID } from 'crypto';
 import { z } from 'zod';
 
+type SessionEntry = { server: McpServer; transport: StreamableHTTPServerTransport };
+
 export class TodoMcpServer {
-    private mcpServer!: McpServer;
     private httpServer!: http.Server;
-    private transport!: StreamableHTTPServerTransport;
     private httpPort: number = 0;
+    /** Session ID -> { server, transport } so multiple Cursor clients can connect without "Server already initialized". */
+    private sessions = new Map<string, SessionEntry>();
 
     constructor(private provider: TodoViewProvider) { }
 
-    public async start(): Promise<vscode.Uri> {
-        // ── 1. Create the high-level McpServer ──────────────────────────
-        this.mcpServer = new McpServer({
+    /** Creates a response wrapper that captures mcp-session-id and stores the session for future requests. */
+    private captureSessionIdRes(res: ServerResponse, entry: SessionEntry): ServerResponse {
+        const origSetHeader = res.setHeader.bind(res);
+        const origWriteHead = res.writeHead.bind(res);
+        res.setHeader = (name: string | string[], value: string | number | string[]): ServerResponse => {
+            if (typeof name === 'string' && name.toLowerCase() === 'mcp-session-id') {
+                const id = Array.isArray(value) ? value[0] : value;
+                if (typeof id === 'string') this.sessions.set(id, entry);
+            }
+            return (origSetHeader as (n: string | string[], v: string | number | string[]) => ServerResponse)(name, value);
+        };
+        res.writeHead = (statusCode: number, ...args: unknown[]): ServerResponse => {
+            const headers = args.find((a): a is Record<string, string | string[] | number | undefined> =>
+                typeof a === 'object' && a !== null && !Array.isArray(a)) as Record<string, string | string[] | number | undefined> | undefined;
+            const sid = headers?.['mcp-session-id'];
+            if (typeof sid === 'string') this.sessions.set(sid, entry);
+            else if (Array.isArray(sid) && sid[0]) this.sessions.set(String(sid[0]), entry);
+            return origWriteHead(statusCode, ...(args as [string?, Record<string, string | string[] | number | undefined>?]));
+        };
+        return res;
+    }
+
+    /** Creates a new MCP server + transport pair for one client session. */
+    private createSession(): SessionEntry {
+        const server = new McpServer({
             name: 'TODO_Extension',
             version: '0.0.1',
         });
-
-        // ── 2. Register tools with the new `registerTool` API ───────────
-        this.registerTools();
-
-        // ── 3. Create the Streamable HTTP transport (replaces deprecated SSE) ─
-        this.transport = new StreamableHTTPServerTransport({
+        this.registerToolsOn(server);
+        const transport = new StreamableHTTPServerTransport({
             sessionIdGenerator: () => randomUUID(),
         });
+        server.connect(transport);
+        return { server, transport };
+    }
 
-        // ── 4. Connect the server to the transport ──────────────────────
-        await this.mcpServer.connect(this.transport);
-
-        // ── 5. Start a raw Node HTTP server that delegates to transport ─
+    public async start(): Promise<vscode.Uri> {
         this.httpServer = http.createServer(async (req, res) => {
-
             if (req.url !== "/mcp") {
                 res.writeHead(404).end();
                 return;
             }
 
             try {
-                await this.transport.handleRequest(req, res);
-            } catch {
+                const sessionId = req.headers['mcp-session-id'];
+                const existing = typeof sessionId === 'string' ? this.sessions.get(sessionId) : undefined;
+
+                if (existing) {
+                    await existing.transport.handleRequest(req, res);
+                    return;
+                }
+
+                // New client: create a dedicated server+transport so each connection gets its own init (avoids "Server already initialized").
+                const entry = this.createSession();
+                this.captureSessionIdRes(res, entry);
+                await entry.transport.handleRequest(req, res);
+            } catch (err) {
+                console.error('[TODO MCP] Request error:', err);
                 res.writeHead(500).end("Internal Server Error");
             }
         });
@@ -60,14 +92,17 @@ export class TodoMcpServer {
     }
 
     public async stop(): Promise<void> {
-        await this.mcpServer?.close();
+        for (const { server } of this.sessions.values()) {
+            await server?.close();
+        }
+        this.sessions.clear();
         this.httpServer?.close();
     }
 
-    // ── Tool Registration ───────────────────────────────────────────────
-    private registerTools() {
+    // ── Tool Registration (per-session server) ───────────────────────────
+    private registerToolsOn(mcpServer: McpServer) {
         // --- 1. GET TASKS ---
-        this.mcpServer.registerTool(
+        mcpServer.registerTool(
             'todo_get_tasks',
             {
                 description: 'Retrieves all tasks currently in the TODO extension. ALWAYS use this first when the user asks to "get", "view", or "show" tasks (e.g., "get me the current blocked items", "get the active items to work for today", "get all overdue items"). ALSO use this first if the user says "start working on..." so you can find the task IDs before updating them. The response includes colored indicators: 🔵 TODO, 🟠 Active, 🟣 Backlog, 🔴 Blocked, 🟢 Completed.',
@@ -118,10 +153,10 @@ export class TodoMcpServer {
         );
 
         // --- 2. ADD TASKS (BULK) ---
-        this.mcpServer.registerTool(
+        mcpServer.registerTool(
             'todo_add_tasks',
-            {
-                description: 'Bulk adds new tasks to the tracker. Highly flexible: Use this tool to parse conversations, git commits, or unstructured requests and map them into multiple categorized tasks at once. If the user makes a vague request like "extract tasks from this transcript", deduce the categories, dates (YYYY-MM-DD), and titles, then pass them as an array here.',
+            { 
+                description: 'In registerToolsOn(), for todo_get_tasks: Get the user\'s todo list from the TODO extension. Use this when the user asks "what is in my todo list", "show my tasks", "get my todos", or to view/show/get tasks. ALWAYS use this first before todo_update_tasks or todo_delete_tasks so you have the correct task IDs. Response includes: 🔵 TODO, 🟠 Active, 🟣 Backlog, 🔴 Blocked, 🟢 Completed.',
                 inputSchema: z.object({
                     tasks: z.array(z.object({
                         title: z.string().describe("Clear, concise task title"),
@@ -146,7 +181,7 @@ export class TodoMcpServer {
         );
 
         // --- 3. UPDATE TASKS (BULK) ---
-        this.mcpServer.registerTool(
+        mcpServer.registerTool(
             'todo_update_tasks',
             {
                 description: 'Bulk updates existing tasks. Use this for moving tasks between categories (e.g., "start working on X" means move X to Active, "mark as done" means move to Completed) or changing due dates. Triggers: "start working on...", "work on...", "mark as...". You MUST use todo_get_tasks first to know the correct `id` of the tasks you want to modify.',
@@ -175,7 +210,7 @@ export class TodoMcpServer {
         );
 
         // --- 4. DELETE TASKS (BULK) ---
-        this.mcpServer.registerTool(
+        mcpServer.registerTool(
             'todo_delete_tasks',
             {
                 description: 'Bulk deletes tasks by exact ID. ALWAYS run todo_get_tasks first to get the correct IDs before deleting.',

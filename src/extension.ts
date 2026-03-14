@@ -63,9 +63,23 @@ export function activate(context: vscode.ExtensionContext) {
 
 		const home = homedir();
 		updateConfig(join(home, '.gemini', 'antigravity', 'mcp_config.json'));
-		updateConfig(join(home, 'Library', 'Application Support', 'Claude', 'mcp_config.json'));
+		updateConfig(join(home, '.cursor', 'mcp.json'));
+		updateConfig(join(home, '.vscode', 'mcp.json'));
+		updateConfig(join(home, 'Library', 'Application Support', 'Claude', 'mcp.json'));
 		updateConfig(join(home, 'Library', 'Application Support', 'Code', 'User', 'mcp.json'));
 		updateConfig(join(home, 'Library', 'Application Support', 'Code', 'User', 'globalStorage', 'mcp.json'));
+
+		// Attempt to register with Cursor IDE natively
+		try {
+			await vscode.commands.executeCommand('cursor.mcp.registerServer', {
+				id: 'todo-mcp-server',
+				type: 'sse',
+				url: uri.toString()
+			});
+			console.log('[TODO MCP] Successfully registered with Cursor.');
+		} catch (error) {
+			console.log('[TODO MCP] Cursor MCP API not available or registration failed.');
+		}
 
 		vscode.window.showInformationMessage(`TODO MCP Server is active on ${uri.authority}`);
 	});
