@@ -21,6 +21,19 @@ Organize your tasks into structured environments. Move tasks easily via Drag and
 * **Backlog**: The parking lot for later ideas.
 
 
+### Flexible Storage Scopes
+Manage your tasks where they belong. The extension supports three storage modes, accessible via the toggle buttons in the sidebar header:
+
+* **File Mode (Default)**: Stores tasks in a `.todo` JSON file in your project's root directory.
+    * **Project Isolation**: 100% reliable task separation when switching folders.
+    * **On-Demand**: The file is only created once you add your first task.
+    * **Portable**: Keep your TODOs with your code (ideal for shared projects).
+* **Global Mode**: Shares the same task list across all folders and VS Code windows. Ideal for general "To-Do" lists that aren't tied to a specific project.
+* **Workspace Mode**: Uses VS Code's internal `workspaceState`. Tasks are tied to the folder but stored internally by VS Code (no visible file).
+
+---
+
+
 ### Git Heuristic Tracking
 Stay in flow. The extension automatically monitors your Git activity. If it detects a commit message matching an active task title, it will automatically mark the task as **Completed**. If your Git commit or output mentions failures, it logs tasks as **Blocked**.
 
@@ -43,6 +56,7 @@ Maximize your productivity with these built-in shortcuts inside the Webview Task
 | `Enter` (Filled Date Fields) | Validate and Add task |
 
 ### Action Buttons
+- **Global / File Toggles**: Instantly switch between shared and project-specific storage. The active mode is highlighted with a themed glow.
 - **Clean View**: Toggles hiding empty categories to save screen real estate.
 - **Delete All / Clear Category**: Instantly purge completed or stale tasks.
 - **Activate All**: Bring all TODOs into the Active swimlane.
