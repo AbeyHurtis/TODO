@@ -56,6 +56,52 @@ html {
     align-items: flex-start;
 }
 
+.storage-switch {
+    display: flex;
+    gap: 2px;
+    align-items: center;
+}
+
+.storage-btn {
+    background: transparent;
+    border: none;
+    color: var(--vscode-foreground);
+    cursor: pointer;
+    padding: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    opacity: 0.4;
+    transition: all 0.2s;
+    width: 28px;
+    height: 28px;
+}
+
+.storage-btn:hover {
+    opacity: 0.8;
+    background: var(--vscode-toolbar-hoverBackground);
+}
+
+.storage-btn.active,
+.icon-btn.active {
+    opacity: 1;
+}
+
+.storage-btn svg,
+.storage-switch .icon-btn svg {
+    width: 18px;
+    height: 18px;
+    color: var(--vscode-button-background);
+    filter: drop-shadow(0 0 1px var(--vscode-button-background));
+}
+
+.storage-btn.active svg,
+.storage-switch .icon-btn.active svg {
+    color: var(--vscode-foreground);
+    filter: drop-shadow(0 0 4px var(--vscode-foreground));
+}
+
 #taskInput.fade-out,
 #dateWrapper.fade-out {
     opacity: 0;
@@ -172,6 +218,7 @@ html {
         opacity: 0;
         transform: translateY(-5px) scale(0.98);
     }
+
     to {
         opacity: 1;
         transform: translateY(0) scale(1);
@@ -254,9 +301,11 @@ html {
 
 .validation-error {
     position: absolute;
-    right: 40px; /* Leave space for the tick button */
+    right: 40px;
+    /* Leave space for the tick button */
     top: 50%;
-    transform: translateY(-50%) translateY(-35px); /* Pop above the field */
+    transform: translateY(-50%) translateY(-35px);
+    /* Pop above the field */
     background: var(--vscode-errorForeground);
     color: var(--vscode-button-foreground);
     padding: 4px 10px;
@@ -268,7 +317,7 @@ html {
     pointer-events: none;
     transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     z-index: 1001;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
 .validation-error.show {
@@ -784,10 +833,27 @@ input[type="checkbox"] {
     letter-spacing: 0.05em;
 }
 
+.composite-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    min-width: 0;
+}
+
+.storage-switch {
+    display: flex;
+    gap: 2px;
+    align-items: center;
+    margin-left: auto;
+    /* Push to the right end of the title area */
+}
+
 .action-buttons {
     display: flex;
     gap: 4px;
     flex-shrink: 0;
+    margin-left: 8px;
 }
 
 .test-area {

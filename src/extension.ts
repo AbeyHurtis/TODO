@@ -7,10 +7,21 @@ import { GitManager } from './gitManager';
 import { registerChatParticipant } from './chatParticipant';
 import { HeuristicTracker } from './heuristicTracker';
 import { TodoMcpServer } from './mcpServer';
+import { FileMemento } from './fileMemento';
 
 export function activate(context: vscode.ExtensionContext) {
+	const storageScope = vscode.workspace.getConfiguration('todo').get<string>('storageScope', 'global');
+	let state: vscode.Memento;
+	
+	if (storageScope === 'file') {
+		state = new FileMemento();
+	} else {
+		state = storageScope === 'workspace' ? context.workspaceState : context.globalState;
+	}
+	
+	console.log(`[TODO] Activating. Workspace: ${vscode.workspace.name}. Scope: ${storageScope}. Storage Type: ${storageScope === 'file' ? 'File' : (storageScope === 'workspace' ? 'Workspace' : 'Global')}`);
 
-	const provider = new TodoViewProvider(context.extensionUri, context.globalState);
+	const provider = new TodoViewProvider(context.extensionUri, state);
 
 	context.subscriptions.push(
 		vscode.window.registerWebviewViewProvider(TodoViewProvider.viewType, provider)
@@ -43,7 +54,11 @@ export function activate(context: vscode.ExtensionContext) {
 				}
 				if (!config.mcpServers) config.mcpServers = {};
 
-				config.mcpServers["todo-extension"] = {
+				const workspaceId = vscode.workspace.name || 'global';
+				const safeWorkspaceId = workspaceId.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+				const mcpKey = `todo-extension${storageScope === 'workspace' ? `-${safeWorkspaceId}` : ''}`;
+
+				config.mcpServers[mcpKey] = {
 					"url": uri.toString(),
 					"serverURL": uri.toString()
 				};
@@ -124,6 +139,18 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(
 		vscode.commands.registerCommand('todo.addTask', () => provider.addTaskPrompt()),
 		vscode.commands.registerCommand('todo.clearCompleted', () => provider.clearCompleted()),
-		vscode.commands.registerCommand('todo.clearActive', () => provider.clearActive())
+		vscode.commands.registerCommand('todo.clearActive', () => provider.clearActive()),
+		vscode.workspace.onDidChangeConfiguration(e => {
+			if (e.affectsConfiguration('todo.storageScope')) {
+				const newStorageScope = vscode.workspace.getConfiguration('todo').get<string>('storageScope', 'global');
+				let newState: vscode.Memento;
+				if (newStorageScope === 'file') {
+					newState = new FileMemento();
+				} else {
+					newState = newStorageScope === 'workspace' ? context.workspaceState : context.globalState;
+				}
+				provider.updateStorage(newState);
+			}
+		})
 	);
 }

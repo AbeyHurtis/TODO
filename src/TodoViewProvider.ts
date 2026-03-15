@@ -7,7 +7,7 @@ export class TodoViewProvider implements vscode.WebviewViewProvider {
 
 	constructor(
 		private readonly _extensionUri: vscode.Uri,
-		private readonly _state: vscode.Memento
+		private _state: vscode.Memento
 	) { }
 
 	public resolveWebviewView(
@@ -68,8 +68,20 @@ export class TodoViewProvider implements vscode.WebviewViewProvider {
 				case 'updateTitle':
 					this.updateTitle(data.id, data.title);
 					break;
+				case 'setStorageScope':
+					this.setStorageScope(data.scope);
+					break;
 			}
 		});
+	}
+
+	public async updateStorage(newState: vscode.Memento) {
+		this._state = newState;
+		this._updateWebview();
+	}
+
+	private async setStorageScope(scope: string) {
+		await vscode.workspace.getConfiguration('todo').update('storageScope', scope, vscode.ConfigurationTarget.Global);
 	}
 
 	public addTaskPrompt() {
@@ -165,10 +177,10 @@ export class TodoViewProvider implements vscode.WebviewViewProvider {
 
 	public async addTasks(newTasksData: { title: string, dueDate?: string | null, category?: string, id?: string }[]) {
 		const tasks = this._state.get<any[]>('tasks', []);
-		
+
 		for (const data of newTasksData) {
-			const safeId = data.id 
-				? data.id.replace(/[^a-zA-Z0-9_-]/g, '') 
+			const safeId = data.id
+				? data.id.replace(/[^a-zA-Z0-9_-]/g, '')
 				: Date.now().toString() + Math.random().toString(36).substring(7);
 
 			tasks.push({
@@ -246,7 +258,7 @@ export class TodoViewProvider implements vscode.WebviewViewProvider {
 		let tasks = this._state.get<any[]>('tasks', []);
 		const originalLength = tasks.length;
 		tasks = tasks.filter(t => !ids.includes(t.id));
-		
+
 		if (tasks.length !== originalLength) {
 			await this._state.update('tasks', tasks);
 			this._updateWebview(tasks);
@@ -263,7 +275,7 @@ export class TodoViewProvider implements vscode.WebviewViewProvider {
 		return tasks.sort((a, b) => {
 			const dateA = a.dueDate ? new Date(a.dueDate).getTime() : Infinity;
 			const dateB = b.dueDate ? new Date(b.dueDate).getTime() : Infinity;
-			
+
 			if (dateA !== dateB) {
 				return dateA - dateB;
 			}
@@ -327,10 +339,14 @@ export class TodoViewProvider implements vscode.WebviewViewProvider {
 				this._view.description = `$(alert) ${overdueCount} $(history) ${soonCount}`;
 			}
 
+			const storageScope = vscode.workspace.getConfiguration('todo').get<string>('storageScope', 'global');
+			const scopeLabel = storageScope.charAt(0).toUpperCase() + storageScope.slice(1);
+
 			this._view.webview.postMessage({
 				type: 'updateTasks',
 				tasks: tasks,
-				workspaceName: vscode.workspace.name || 'No Workspace'
+				workspaceName: vscode.workspace.name || 'No Workspace',
+				storageScope: scopeLabel
 			});
 		}
 	}
@@ -347,22 +363,30 @@ export class TodoViewProvider implements vscode.WebviewViewProvider {
                 <link href="${styleUri}" rel="stylesheet">
             </head>
             <body>
-                <div class="container">
-                    <div id="infoSection">
-                        <div class="header-row">
-                            <span id="workspaceName">Loading Workspace...</span>
-                        </div>
-                        <div class="action-buttons">
-						<button class="clear-btn" onclick="clearAll()" data-tooltip="Delete All Tasks">
-							${ICONS.DELETE_CATEGORY}
-						</button>
+				<div class="container">
+					<div id="infoSection">
+						<span id="workspaceName">Loading Workspace...</span>
+						<div class="action-buttons">
+							<button class="clear-btn" onclick="clearAll()" data-tooltip="Delete All Tasks">
+                                ${ICONS.DELETE_CATEGORY}
+                            </button>
                             <button class="icon-btn" onclick="toggleCleanView()" data-tooltip="Clean View (Hide Empty)">
                                 ${ICONS.CLEAN_VIEW}
                             </button>
+							<div class="storage-switch">
+								<button class="icon-btn" id="storageBtnGlobal" onclick="setStorageScope('global')" data-tooltip="Global Storage">
+									${ICONS.GLOBAL}
+								</button>
+								<button class="icon-btn" id="storageBtnFile" onclick="setStorageScope('file')" data-tooltip="File Storage (.todo)">
+									${ICONS.FILE}
+								</button>
+							</div>
+                            
                         </div>
                     </div>
                     <div class="input-area">
                         <div class="input-container">
+                            
                             <textarea id="taskInput" placeholder="Task... (⏎ Date, ⌘⏎ Add)" rows="1"></textarea>
                             
                             <label class="date-wrapper" id="dateWrapper" data-tooltip="Set Due Date">

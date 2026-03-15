@@ -232,7 +232,7 @@ function submitTask() {
 
 input.addEventListener('keydown', (e) => {
     const isModKey = e.metaKey || e.ctrlKey;
-    
+
     if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey && !isModKey)) {
         const val = input.value.trim();
         if (val) {
@@ -251,7 +251,7 @@ input.addEventListener('keydown', (e) => {
 function showDmyInput() {
     input.classList.add('fade-out');
     dateWrapper.classList.add('fade-out');
-    
+
     setTimeout(() => {
         input.style.display = 'none';
         dateWrapper.style.display = 'none';
@@ -259,18 +259,18 @@ function showDmyInput() {
         // Force reflow
         dmyContainer.offsetHeight;
         dmyContainer.classList.add('active');
-        
+
         // Set default placeholders to today
         const now = new Date();
         dayInput.placeholder = String(now.getDate()).padStart(2, '0');
         monthInput.placeholder = String(now.getMonth() + 1).padStart(2, '0');
         yearInput.placeholder = String(now.getFullYear());
-        
+
         // Clear previous values but keep focus
         dayInput.value = '';
         monthInput.value = '';
         yearInput.value = '';
-        
+
         dayInput.focus();
     }, 300);
 }
@@ -281,7 +281,7 @@ function hideDmyInput() {
         dmyContainer.style.display = 'none';
         input.style.display = 'block';
         dateWrapper.style.display = 'flex';
-        
+
         // Force reflow
         input.offsetHeight;
         input.classList.remove('fade-out');
@@ -319,14 +319,14 @@ function validateAndSubmitDmy() {
     const year = parseInt(y);
 
     const date = new Date(year, month - 1, day);
-    const isValid = date.getFullYear() === year && 
-                    date.getMonth() === month - 1 && 
-                    date.getDate() === day;
+    const isValid = date.getFullYear() === year &&
+        date.getMonth() === month - 1 &&
+        date.getDate() === day;
 
     if (isValid) {
         validationError.classList.remove('show');
         const formattedDate = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-        
+
         const newId = Date.now().toString();
         lastAddedTaskId = newId;
 
@@ -343,7 +343,7 @@ function validateAndSubmitDmy() {
         dayInput.value = '';
         monthInput.value = '';
         yearInput.value = '';
-        
+
         hideDmyInput();
     } else {
         showValidationErrorMessage('Invalid Date');
@@ -408,7 +408,7 @@ function showValidationErrorMessage(msg) {
     // Numeric only filter and auto-advance
     el.addEventListener('input', () => {
         el.value = el.value.replace(/[^0-9]/g, '');
-        
+
         if (el !== yearInput && el.value.length >= 2) {
             arr[index + 1].focus();
         }
@@ -442,10 +442,19 @@ window.addEventListener('message', event => {
     if (message.type === 'updateTasks') {
         currentTasks = message.tasks;
         if (message.workspaceName) {
-            workspaceNameEl.textContent = message.workspaceName;
+            const scopeText = message.storageScope ? ` [${message.storageScope}]` : '';
+            workspaceNameEl.textContent = message.workspaceName + scopeText;
         }
 
-        vscode.setState({ tasks: currentTasks, workspaceName: message.workspaceName, collapsedStates, isCleanView });
+        updateStorageButtons(message.storageScope);
+
+        vscode.setState({ 
+            tasks: currentTasks, 
+            workspaceName: workspaceNameEl.textContent, 
+            collapsedStates, 
+            isCleanView,
+            storageScope: message.storageScope
+        });
         renderTasks(currentTasks);
     }
 });
@@ -536,7 +545,7 @@ function renderTasks(tasks) {
         li.addEventListener('dragstart', handleDragStart);
         li.addEventListener('dragover', (e) => {
             handleDragOver(e);
-            
+
             // Visual feedback for insertion point
             const rect = li.getBoundingClientRect();
             const midpoint = rect.top + rect.height / 2;
@@ -609,16 +618,16 @@ function formatDueDate(dueDate, status) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     due.setHours(0, 0, 0, 0);
-    
+
     const diffTime = due.getTime() - today.getTime();
     const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
 
     if (diffDays === 0) return 'Due Today';
-    
+
     if (diffDays > 0 && diffDays <= 15) {
         return `${diffDays} days left`;
     }
-    
+
     if (diffDays < 0 && diffDays >= -15) {
         const ago = Math.abs(diffDays);
         return `Due ${ago} day${ago > 1 ? 's' : ''} ago`;
@@ -629,6 +638,20 @@ function formatDueDate(dueDate, status) {
 
 function changeCategory(id, category) {
     vscode.postMessage({ type: 'changeCategory', id, category });
+}
+
+function setStorageScope(scope) {
+    vscode.postMessage({ type: 'setStorageScope', scope });
+}
+
+function updateStorageButtons(activeScope) {
+    const globalBtn = document.getElementById('storageBtnGlobal');
+    const fileBtn = document.getElementById('storageBtnFile');
+    
+    if (globalBtn && fileBtn) {
+        globalBtn.classList.toggle('active', activeScope === 'Global');
+        fileBtn.classList.toggle('active', activeScope === 'File');
+    }
 }
 
 let dragSourceEl = null;
@@ -673,7 +696,7 @@ function handleDrop(e) {
             ?.replace('cat-', '') || 'Active';
 
         const sourceIndex = currentTasks.findIndex(t => t.id === sourceId);
-        
+
         if (sourceIndex !== -1) {
             const newTasks = [...currentTasks];
             const [movedTask] = newTasks.splice(sourceIndex, 1);
@@ -687,7 +710,7 @@ function handleDrop(e) {
             if (insertAfter) {
                 finalTargetIndex++;
             }
-            
+
             newTasks.splice(finalTargetIndex, 0, movedTask);
 
             currentTasks = newTasks;
