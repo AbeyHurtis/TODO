@@ -2,7 +2,7 @@
   "name": "TODO",
   "displayName": "TODO",
   "description": "TODO",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "icon": "resources/icon.png",
   "publisher": "Hurtis",
   "repository": {
@@ -13,7 +13,19 @@
     "vscode": "^1.100.0"
   },
   "categories": [
-    "Other"
+    "Other",
+    "Programming Languages",
+    "Visualization",
+    "Education",
+    "Testing"
+  ],
+  "keywords": [
+    "todo",
+    "list",
+    "task",
+    "mcp",
+    "mcp-server",
+    "taskList"
   ],
   "activationEvents": [
     "*"
