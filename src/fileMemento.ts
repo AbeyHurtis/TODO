@@ -4,6 +4,7 @@ import * as path from 'path';
 
 export class FileMemento implements vscode.Memento {
     private _filePath: string | undefined;
+    public static lastInternalWriteTime: number = 0;
 
     constructor() {
         this._updateFilePath();
@@ -59,8 +60,15 @@ export class FileMemento implements vscode.Memento {
             data[key] = value;
         }
 
+        // Add explicit instruction header for LLMs reading this file
+        const outputData: any = {
+            "$instruction": "⚠️ DO NOT EDIT DIRECTLY. Use the TODO MCP tools (todo_get_tasks, todo_add_tasks, todo_update_tasks, todo_delete_tasks, todo_clear_category) to ensure live VS Code UI synchronization.",
+            ...data
+        };
+
         try {
-            fs.writeFileSync(this._filePath, JSON.stringify(data, null, 2));
+            FileMemento.lastInternalWriteTime = Date.now();
+            fs.writeFileSync(this._filePath, JSON.stringify(outputData, null, 2), 'utf8');
         } catch (e) {
             vscode.window.showErrorMessage(`Failed to write to .todo file: ${e}`);
         }
@@ -75,14 +83,13 @@ export class FileMemento implements vscode.Memento {
         try {
             const content = fs.readFileSync(this._filePath, 'utf8');
             const data = JSON.parse(content);
-            return Object.keys(data);
+            return Object.keys(data).filter(k => !k.startsWith('$'));
         } catch (e) {
             return [];
         }
     }
 
-    // Required for some modern VS Code versions/types even if not used
     public setKeysForSync(keys: readonly string[]): void {
-        // Not implemented/supported for local file memento
+        // Not implemented for local file memento
     }
 }

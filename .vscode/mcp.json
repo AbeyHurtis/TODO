@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "todo-mcp": {
+      "command": "node",
+      "args": [
+        "/Users/hurtis/.antigravity-ide/extensions/hurtis.todo-2.0.0/bin/todo-mcp.js",
+        "--workspace",
+        "/Users/hurtis/Developer/WebDev/VScodeExtensions/TODO"
+      ]
+    }
+  }
+}

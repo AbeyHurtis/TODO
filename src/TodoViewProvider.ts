@@ -148,27 +148,47 @@ export class TodoViewProvider implements vscode.WebviewViewProvider {
 		this._updateWebview(tasks);
 	}
 
-	public async clearCategory(category: string) {
+	public refresh() {
+		this._updateWebview();
+	}
+
+	public async clearCategory(category: string): Promise<number> {
 		let tasks = this._state.get<any[]>('tasks', []);
-		tasks = tasks.filter(t => {
-			const taskCat = t.category || (t.completed ? 'Completed' : 'Active');
-			return taskCat !== category;
-		});
+		const initialCount = tasks.length;
+		if (category === 'ALL') {
+			tasks = [];
+		} else {
+			tasks = tasks.filter(t => {
+				const taskCat = t.category || (t.completed ? 'Completed' : 'Active');
+				return taskCat !== category;
+			});
+		}
+		const deletedCount = initialCount - tasks.length;
 		await this._state.update('tasks', tasks);
 		this._updateWebview(tasks);
+		return deletedCount;
+	}
+
+	public async moveCategory(fromCategory: string, toCategory: string): Promise<number> {
+		let tasks = this._state.get<any[]>('tasks', []);
+		let movedCount = 0;
+		tasks.forEach(t => {
+			const taskCat = t.category || (t.completed ? 'Completed' : 'Active');
+			if (taskCat === fromCategory) {
+				t.category = toCategory;
+				t.completed = (toCategory === 'Completed');
+				movedCount++;
+			}
+		});
+		if (movedCount > 0) {
+			await this._state.update('tasks', tasks);
+			this._updateWebview(tasks);
+		}
+		return movedCount;
 	}
 
 	public async moveCategoryToActive(category: string) {
-		let tasks = this._state.get<any[]>('tasks', []);
-		tasks.forEach(t => {
-			const taskCat = t.category || (t.completed ? 'Completed' : 'Active');
-			if (taskCat === category) {
-				t.category = 'Active';
-				t.completed = false;
-			}
-		});
-		await this._state.update('tasks', tasks);
-		this._updateWebview(tasks);
+		await this.moveCategory(category, 'Active');
 	}
 
 	public async addTask(title: string, dueDate: string | null = null, category: string = 'TODO', id?: string) {

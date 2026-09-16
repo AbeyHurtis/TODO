@@ -2,7 +2,7 @@
   "name": "TODO",
   "displayName": "TODO",
   "description": "TODO",
-  "version": "0.0.6",
+  "version": "2.0.0",
   "icon": "resources/icon.png",
   "publisher": "Hurtis",
   "repository": {
@@ -28,9 +28,22 @@
     "taskList"
   ],
   "activationEvents": [
-    "*"
+    "onView:todo.taskList",
+    "onCommand:todo.addTask",
+    "onCommand:todo.clearCompleted",
+    "onCommand:todo.clearActive",
+    "onCommand:todo.addBlockedTaskFromSelection",
+    "onCommand:todo.copyMcpConfig",
+    "onCommand:todo.setupAgentRules",
+    "onCommand:todo.showMcpLogs",
+    "onCommand:todo.verifyMcpSetup",
+    "onCommand:todo.debugMcp",
+    "onStartupFinished"
   ],
   "main": "./dist/extension.js",
+  "bin": {
+    "todo-mcp": "./bin/todo-mcp.js"
+  },
   "extensionDependencies": [
     "vscode.git"
   ],
@@ -69,6 +82,26 @@
       {
         "command": "todo.addBlockedTaskFromSelection",
         "title": "TODO: Add blocked task from selection"
+      },
+      {
+        "command": "todo.copyMcpConfig",
+        "title": "TODO: Copy MCP Configuration"
+      },
+      {
+        "command": "todo.setupAgentRules",
+        "title": "TODO: Setup AI Agent Rules (.cursor, AGENTS.md, CLAUDE.md)"
+      },
+      {
+        "command": "todo.showMcpLogs",
+        "title": "TODO: Show MCP Logs"
+      },
+      {
+        "command": "todo.verifyMcpSetup",
+        "title": "TODO: Verify MCP Setup & Tool Discovery"
+      },
+      {
+        "command": "todo.debugMcp",
+        "title": "TODO: Debug MCP Server"
       }
     ],
     "menus": {
@@ -111,6 +144,21 @@
           ],
           "default": "file",
           "description": "Where to store your TODO tasks. 'global' shares tasks across all projects, 'workspace' uses VS Code workspace storage, and 'file' creates a .todo file in your project root."
+        },
+        "todo.mcp.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable the background MCP HTTP Server for VS Code Language Models and HTTP clients."
+        },
+        "todo.mcp.port": {
+          "type": "number",
+          "default": 0,
+          "description": "Port for the background MCP HTTP server. Set to 0 for a dynamic available port."
+        },
+        "todo.mcp.autoRegisterConfig": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically write MCP server configuration into workspace (.cursor, .vscode, .gemini) and global config files. Enables immediate agent tool discovery."
         }
       }
     }
@@ -119,8 +167,8 @@
     "vscode:prepublish": "npm run package-publish",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "package-publish": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --minify",
-    "esbuild-base": "esbuild ./src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node",
+    "package-publish": "esbuild ./src/extension.ts ./src/stdioServer.ts --bundle --outdir=dist --external:vscode --format=cjs --platform=node --minify",
+    "esbuild-base": "esbuild ./src/extension.ts ./src/stdioServer.ts --bundle --outdir=dist --external:vscode --format=cjs --platform=node",
     "esbuild": "npm run esbuild-base -- --sourcemap",
     "esbuild-watch": "npm run esbuild-base -- --sourcemap --watch",
     "pretest": "npm run compile && npm run lint",
