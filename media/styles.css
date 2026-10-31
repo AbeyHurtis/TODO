@@ -374,7 +374,6 @@ html {
     overflow-y: scroll;
     scrollbar-gutter: stable;
     min-height: 50px;
-    max-height: 400px;
     padding: 0 10px;
 }
 
